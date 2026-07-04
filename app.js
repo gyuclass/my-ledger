@@ -128,9 +128,11 @@ async function switchTab(tabId) {
 async function renderDashboard() {
   const container = document.getElementById('tab-content');
   
-  // 데이터 연산 (비동기 호출 대기)
-  const allExpenses = await window.StorageService.getExpenses();
-  const allIncomes = await window.StorageService.getIncomes();
+  // 데이터 병렬 조회 및 싱크 완료 대기
+  const [allExpenses, allIncomes] = await Promise.all([
+    window.StorageService.getExpenses(),
+    window.StorageService.getIncomes()
+  ]);
 
   const expenses = allExpenses.filter(e => e.year === state.selectedYear);
   const incomes = allIncomes.filter(i => i.year === state.selectedYear);
@@ -183,7 +185,7 @@ async function renderDashboard() {
           </div>
           <div class="bg-indigo-100 text-indigo-600 p-3 rounded-xl"><i data-lucide="credit-card" class="w-6 h-6"></i></div>
         </div>
-        <p class="text-xs text-slate-500 mt-4">해당 월에 입력된 모든 지출의 합산입니다.</p>
+        <p class="text-xs text-slate-500 mt-4">해당 월에 입력된 모든 지출(변동+고정)의 합산입니다.</p>
       </div>
 
       <div class="glass-card rounded-2xl p-6 hover-lift">
@@ -401,18 +403,81 @@ function drawCategoryChart(monthExpenses) {
 
 
 // ----------------------------------------------------
-// 2. 지출 관리 탭 (Expenses)
+// 2. 지출 관리 탭 (Expenses) - UI 2단 레이아웃 개편
 // ----------------------------------------------------
+
+// 신규: 고정지출 템플릿(마스터)의 해당 연월 유효성 검사기
+function isFixedExpenseValidForMonth(fixed, targetYear, targetMonth) {
+  // 시작 연월 조건 만족 여부
+  const startVal = fixed.startYear * 100 + fixed.startMonth;
+  const targetVal = targetYear * 100 + targetMonth;
+  if (targetVal < startVal) return false;
+
+  // 종료 연월 지정 시 만료 여부 확인
+  if (fixed.endYear && fixed.endMonth) {
+    const endVal = fixed.endYear * 100 + fixed.endMonth;
+    if (targetVal > endVal) return false; // 만기 월 이후면 무효
+  }
+  return true;
+}
+
+// 신규: 렌더링 전 고정지출 템플릿의 지출 내역 자동 주입 동기화 함수
+async function syncFixedExpensesForMonth(targetYear, targetMonth) {
+  const [fixedList, currentExpenses] = await Promise.all([
+    window.StorageService.getFixedExpenses(),
+    window.StorageService.getExpenses()
+  ]);
+
+  // 이번 달에 속하는 활성 지출 필터
+  const thisMonthExpenses = currentExpenses.filter(e => e.year === targetYear && e.month === targetMonth);
+
+  // 이번 달에 유효한 고정비 마스터 템플릿 필터
+  const validFixedTemplates = fixedList.filter(f => isFixedExpenseValidForMonth(f, targetYear, targetMonth));
+
+  let insertedCount = 0;
+
+  for (const t of validFixedTemplates) {
+    // 이미 동일한 이름과 카테고리로 생성된 지출이 존재하는지 검증
+    const exists = thisMonthExpenses.some(e => e.itemName === t.itemName && e.category === t.category);
+    if (!exists) {
+      await window.StorageService.addExpense({
+        year: targetYear,
+        month: targetMonth,
+        category: t.category,
+        itemName: t.itemName,
+        amount: t.amount,
+        paymentMethod: t.paymentMethod,
+        paymentDay: t.paymentDay,
+        isFixed: true, // 고정지출 마킹
+        memo: t.memo ? `(자동주입) ${t.memo}` : '고정지출 자동반영'
+      });
+      insertedCount++;
+    }
+  }
+
+  if (insertedCount > 0) {
+    console.log(`${targetYear}년 ${targetMonth}월에 신규 고정지출 ${insertedCount}건이 자동 반영되었습니다.`);
+  }
+}
+
 async function renderExpenses() {
   const container = document.getElementById('tab-content');
   
-  // 데이터 병렬 조회 대기
-  const [categories, paymentMethods, allExpenses] = await Promise.all([
+  // 0. 고정지출 싱크 자동 실행 (조회하는 달에 맞는 템플릿 실시간 동기화)
+  await syncFixedExpensesForMonth(state.selectedYear, state.selectedMonth);
+
+  // 1. 데이터 일괄 조회 대기
+  const [categories, paymentMethods, allExpenses, fixedList] = await Promise.all([
     window.StorageService.getCategories(),
     window.StorageService.getPaymentMethods(),
-    window.StorageService.getExpenses()
+    window.StorageService.getExpenses(),
+    window.StorageService.getFixedExpenses()
   ]);
   
+  // 현재 월의 유효한 고정지출 템플릿
+  const currentMonthFixedTemplates = fixedList.filter(f => isFixedExpenseValidForMonth(f, state.selectedYear, state.selectedMonth));
+  
+  // 현재 조회하는 연월의 지출 내역
   let expenses = allExpenses.filter(e => e.year === state.selectedYear && e.month === state.selectedMonth);
     
   if (state.expenseFilter.category !== 'all') {
@@ -424,73 +489,72 @@ async function renderExpenses() {
   
   expenses.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
+  // 2단 분리 레이아웃 구조 렌더링
   container.innerHTML = `
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
       
-      <!-- 지출 입력 폼 -->
-      <div class="glass-card rounded-2xl p-6 h-fit">
-        <h3 class="text-base font-bold text-slate-700 mb-4 flex items-center gap-2">
-          <i data-lucide="plus-circle" class="w-5 h-5 text-indigo-500"></i>
-          지출 항목 등록 (${state.selectedYear}년 ${state.selectedMonth}월)
-        </h3>
-        
-        <form id="expense-add-form" class="space-y-4" onsubmit="handleExpenseAdd(event)">
-          <div>
-            <label class="block text-xs font-semibold text-slate-500 mb-1">분류</label>
-            <select id="add-expense-category" class="w-full px-3 py-2 border rounded-lg text-sm input-premium" required>
-              <option value="">-- 분류 선택 --</option>
-              ${categories.map(c => `<option value="${c.name}">${c.name}</option>`).join('')}
-            </select>
-          </div>
-          <div>
-            <label class="block text-xs font-semibold text-slate-500 mb-1">항목명</label>
-            <input type="text" id="add-expense-name" class="w-full px-3 py-2 border rounded-lg text-sm input-premium" placeholder="예: 메리츠 보험" required>
-          </div>
-          <div>
-            <label class="block text-xs font-semibold text-slate-500 mb-1">금액(원)</label>
-            <input type="number" id="add-expense-amount" class="w-full px-3 py-2 border rounded-lg text-sm input-premium" placeholder="숫자만 입력" required>
-          </div>
-          
-          <div class="grid grid-cols-2 gap-4">
-            <div>
-              <label class="block text-xs font-semibold text-slate-500 mb-1">지출일</label>
-              <input type="text" id="add-expense-day" class="w-full px-3 py-2 border rounded-lg text-sm input-premium" placeholder="예: 5일, 만기">
-            </div>
-            <div>
-              <label class="block text-xs font-semibold text-slate-500 mb-1">결제수단</label>
-              <select id="add-expense-method" class="w-full px-3 py-2 border rounded-lg text-sm input-premium">
-                ${paymentMethods.map(pm => `<option value="${pm}">${pm}</option>`).join('')}
-              </select>
-            </div>
-          </div>
-          
-          <div class="flex items-center space-x-2 pt-2">
-            <input type="checkbox" id="add-expense-fixed" class="w-4 h-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500">
-            <label for="add-expense-fixed" class="text-xs font-bold text-slate-600">매월 반복되는 고정지출입니다.</label>
-          </div>
-          
-          <div>
-            <label class="block text-xs font-semibold text-slate-500 mb-1">메모</label>
-            <textarea id="add-expense-memo" rows="2" class="w-full px-3 py-2 border rounded-lg text-sm input-premium" placeholder="세부 특징 기술"></textarea>
-          </div>
-          
-          <button type="submit" class="w-full py-2.5 px-4 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white text-sm font-semibold rounded-lg shadow-lg transition">
-            지출 추가하기
+      <!-- [좌측 단] 고정지출 마스터 관리 섹션 (1/3 너비) -->
+      <div class="glass-card rounded-2xl p-6 flex flex-col h-fit">
+        <div class="flex items-center justify-between mb-4 border-b border-slate-100 pb-3">
+          <h3 class="text-sm font-bold text-slate-700 flex items-center gap-1.5">
+            <i data-lucide="pin" class="w-4 h-4 text-indigo-500"></i>
+            고정지출 원본 관리
+          </h3>
+          <button onclick="openFixedModal()" class="bg-indigo-50 hover:bg-indigo-100 text-indigo-600 px-2 py-1 rounded text-xs font-bold transition flex items-center gap-1">
+            <i data-lucide="plus" class="w-3.5 h-3.5"></i> 등록
           </button>
-        </form>
+        </div>
+
+        <p class="text-[11px] text-slate-400 font-medium mb-3 leading-relaxed">
+          여기에 등록해 두면, 설정된 유효 기간에 맞춰 매월 지출 내역에 자동으로 주입됩니다.
+        </p>
+
+        <!-- 고정비 마스터 리스트 -->
+        <div class="space-y-3 max-h-[450px] overflow-y-auto pr-1">
+          ${currentMonthFixedTemplates.length === 0 ? `
+            <div class="text-center py-10 text-slate-400 bg-slate-50/50 rounded-xl border border-dashed">
+              <p class="text-xs font-bold">이번 달에 유효한 고정비가 없습니다.</p>
+              <p class="text-[10px] text-slate-300 mt-1">상단 등록 버튼을 눌러 새로 생성해보세요.</p>
+            </div>
+          ` : currentMonthFixedTemplates.map(f => {
+            const endText = f.endYear ? `${f.endYear}.${String(f.endMonth).padStart(2,'0')} 만기` : '계속 발생';
+            return `
+              <div class="p-3 bg-slate-50 hover:bg-slate-100/70 border border-slate-200/50 rounded-xl transition flex flex-col justify-between">
+                <div class="flex justify-between items-start">
+                  <div>
+                    <div class="flex items-center space-x-1.5">
+                      <span class="text-[9px] font-bold bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded">${f.category}</span>
+                      <span class="text-xs font-bold text-slate-700">${f.itemName}</span>
+                    </div>
+                    <span class="block text-[10px] text-slate-400 font-semibold mt-1">
+                      기간: ${f.startYear}.${String(f.startMonth).padStart(2,'0')} ~ ${endText}
+                    </span>
+                    ${f.memo ? `<span class="block text-[9px] text-slate-400 mt-0.5">${f.memo}</span>` : ''}
+                  </div>
+                  <span class="text-xs font-bold text-slate-700">${formatWon(f.amount)}</span>
+                </div>
+                <div class="flex justify-end space-x-2 mt-2 pt-2 border-t border-slate-200/40">
+                  <button onclick="openFixedModal('${f.id}')" class="text-[10px] font-bold text-indigo-500 hover:text-indigo-700 transition">수정</button>
+                  <button onclick="deleteFixedExpenseItem('${f.id}')" class="text-[10px] font-bold text-red-400 hover:text-red-600 transition">삭제</button>
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
       </div>
 
-      <!-- 지출 목록 -->
+      <!-- [우측 단] 실제 지출 내역 목록 (2/3 너비) -->
       <div class="glass-card rounded-2xl p-6 lg:col-span-2 flex flex-col">
-        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 border-b border-slate-100 pb-4">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4 border-b border-slate-100 pb-3">
           <div class="flex items-center space-x-3">
-            <h3 class="text-base font-bold text-slate-700">지출 목록</h3>
+            <h3 class="text-base font-bold text-slate-700">${state.selectedYear}년 ${state.selectedMonth}월 지출 목록</h3>
             <span class="bg-indigo-50 text-indigo-600 text-xs px-2.5 py-1 rounded-full font-bold">총 ${expenses.length}건</span>
           </div>
           
           <div class="flex flex-wrap gap-2">
-            <button onclick="copyPreviousMonthFixed()" class="bg-indigo-50 hover:bg-indigo-100 text-indigo-600 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition">
-              <i data-lucide="copy" class="w-3.5 h-3.5"></i> 이전 달 고정값 복사
+            <!-- 수동 기입 추가 버튼 신설 -->
+            <button onclick="openExpenseCreateForm()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow transition">
+              <i data-lucide="plus-circle" class="w-3.5 h-3.5"></i> 일반 지출 수동 등록
             </button>
             
             <select id="expense-month-filter" class="bg-slate-100 border-none rounded-lg text-xs font-bold py-1.5 px-2 text-slate-600 focus:outline-none" onchange="changeExpenseFilterMonth(this.value)">
@@ -502,34 +566,34 @@ async function renderExpenses() {
         </div>
 
         <!-- 엑셀 드롭존 -->
-        <div id="expense-dropzone" class="excel-dropzone rounded-xl p-5 mb-4 text-center cursor-pointer hover:border-indigo-400 transition">
+        <div id="expense-dropzone" class="excel-dropzone rounded-xl p-4 mb-4 text-center cursor-pointer hover:border-indigo-400 transition">
           <div class="flex flex-col items-center space-y-1 text-slate-500">
-            <i data-lucide="upload-cloud" class="w-8 h-8 text-indigo-500"></i>
-            <p class="text-xs font-bold">카드 소비 내역 엑셀/ODS 파일 드래그 또는 클릭 업로드</p>
-            <p class="text-[10px] text-slate-400 font-medium">제공해주신 엑셀 내 '소비(리카드)', '소비(하나카드)' 등 탭의 내역을 자동 파싱합니다.</p>
+            <i data-lucide="upload-cloud" class="w-6 h-6 text-indigo-500"></i>
+            <p class="text-[11px] font-bold">카드 소비 내역 엑셀/ODS 파일 드래그 또는 클릭 업로드</p>
+            <p class="text-[9px] text-slate-400 font-medium">리카드, 하나카드 등 탭의 내역을 자동 분석 및 파싱해 줍니다.</p>
           </div>
           <input type="file" id="excel-file-input" class="hidden" accept=".xlsx, .xls, .ods" onchange="handleExcelUpload(event)">
         </div>
 
         <!-- 필터 영역 -->
-        <div class="grid grid-cols-2 gap-4 mb-4 bg-slate-50 p-3 rounded-xl border border-slate-100">
+        <div class="grid grid-cols-2 gap-4 mb-4 bg-slate-50 p-2.5 rounded-xl border border-slate-100">
           <div>
-            <label class="block text-[10px] font-bold text-slate-400 mb-1">분류 필터</label>
-            <select class="w-full bg-white border border-slate-200 rounded-lg text-xs p-1.5 focus:outline-none" onchange="filterExpenses('category', this.value)">
+            <label class="block text-[9px] font-bold text-slate-400 mb-1">분류 필터</label>
+            <select class="w-full bg-white border border-slate-200 rounded-lg text-[11px] p-1.5 focus:outline-none" onchange="filterExpenses('category', this.value)">
               <option value="all">전체 분류</option>
               ${categories.map(c => `<option value="${c.name}" ${state.expenseFilter.category === c.name ? 'selected' : ''}>${c.name}</option>`).join('')}
             </select>
           </div>
           <div>
-            <label class="block text-[10px] font-bold text-slate-400 mb-1">결제수단 필터</label>
-            <select class="w-full bg-white border border-slate-200 rounded-lg text-xs p-1.5 focus:outline-none" onchange="filterExpenses('paymentMethod', this.value)">
+            <label class="block text-[9px] font-bold text-slate-400 mb-1">결제수단 필터</label>
+            <select class="w-full bg-white border border-slate-200 rounded-lg text-[11px] p-1.5 focus:outline-none" onchange="filterExpenses('paymentMethod', this.value)">
               <option value="all">전체 결제수단</option>
               ${paymentMethods.map(pm => `<option value="${pm}" ${state.expenseFilter.paymentMethod === pm ? 'selected' : ''}>${pm}</option>`).join('')}
             </select>
           </div>
         </div>
 
-        <!-- 리스트 -->
+        <!-- 지출 내역 리스트 -->
         <div class="overflow-y-auto max-h-[500px] flex-grow pr-1 space-y-3">
           ${expenses.length === 0 ? `
             <div class="text-center py-20 text-slate-400">
@@ -538,8 +602,8 @@ async function renderExpenses() {
             </div>
           ` : expenses.map(e => `
             <div class="flex items-center justify-between p-4 bg-white border border-slate-200/60 rounded-xl hover:shadow-sm transition">
-              <div class="flex items-start space-x-3.5">
-                <span class="mt-0.5 px-2 py-0.5 text-[10px] font-bold rounded ${e.isFixed ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-600'}">
+              <div class="flex items-start space-x-3">
+                <span class="mt-0.5 px-2 py-0.5 text-[9px] font-bold rounded ${e.isFixed ? 'bg-indigo-50 text-indigo-600 border border-indigo-100' : 'bg-slate-50 text-slate-500 border border-slate-200'}">
                   ${e.isFixed ? '고정' : '변동'}
                 </span>
                 <div>
@@ -590,6 +654,30 @@ async function filterExpenses(key, val) {
   await renderExpenses();
 }
 
+// 신규: 지출 관리 탭 내 '일반 지출 수동 등록' 모달 제어
+async function openExpenseCreateForm() {
+  // 모달 재활용: 기존 지출 수정 모달을 신규 추가 폼으로 사용합니다.
+  document.getElementById('edit-expense-id').value = ''; // 추가 모드임을 표시
+  document.getElementById('edit-expense-year').value = state.selectedYear;
+  document.getElementById('edit-expense-month').value = state.selectedMonth;
+  document.getElementById('edit-expense-name').value = '';
+  document.getElementById('edit-expense-amount').value = '';
+  document.getElementById('edit-expense-day').value = '';
+  document.getElementById('edit-expense-fixed').checked = false;
+  document.getElementById('edit-expense-memo').value = '';
+
+  const categories = await window.StorageService.getCategories();
+  const catSelect = document.getElementById('edit-expense-category');
+  catSelect.innerHTML = '<option value="">-- 분류 선택 --</option>' + categories.map(c => `<option value="${c.name}">${c.name}</option>`).join('');
+
+  const methods = await window.StorageService.getPaymentMethods();
+  const pmSelect = document.getElementById('edit-expense-method');
+  pmSelect.innerHTML = '<option value="">-- 결제수단 선택 --</option>' + methods.map(pm => `<option value="${pm}">${pm}</option>`).join('');
+
+  document.getElementById('expense-modal').classList.remove('hidden');
+  lucide.createIcons();
+}
+
 async function handleExpenseAdd(event) {
   event.preventDefault();
   
@@ -623,7 +711,7 @@ async function handleExpenseAdd(event) {
 }
 
 async function deleteExpenseItem(id) {
-  if (confirm('삭제하시겠습니까?')) {
+  if (confirm('지출 항목을 삭제하시겠습니까? (이번 달의 실지출 데이터에서만 삭제됩니다.)')) {
     try {
       showLoading();
       await window.StorageService.deleteExpense(id);
@@ -633,49 +721,6 @@ async function deleteExpenseItem(id) {
       await renderExpenses();
     }
   }
-}
-
-async function copyPreviousMonthFixed() {
-  let prevYear = state.selectedYear;
-  let prevMonth = state.selectedMonth - 1;
-  if (prevMonth === 0) {
-    prevYear = state.selectedYear - 1;
-    prevMonth = 12;
-  }
-
-  showLoading();
-  const allExpenses = await window.StorageService.getExpenses();
-  const prevFixedExpenses = allExpenses.filter(e => e.year === prevYear && e.month === prevMonth && e.isFixed);
-  
-  if (prevFixedExpenses.length === 0) {
-    alert(`${prevYear}년 ${prevMonth}월에 등록된 고정지출 항목이 없습니다.`);
-    await renderExpenses();
-    return;
-  }
-
-  const currExpenses = allExpenses.filter(e => e.year === state.selectedYear && e.month === state.selectedMonth);
-  
-  let copiedCount = 0;
-  for (const prevExp of prevFixedExpenses) {
-    const exists = currExpenses.some(curr => curr.itemName === prevExp.itemName && curr.category === prevExp.category);
-    if (!exists) {
-      await window.StorageService.addExpense({
-        year: state.selectedYear,
-        month: state.selectedMonth,
-        category: prevExp.category,
-        itemName: prevExp.itemName,
-        amount: prevExp.amount,
-        paymentMethod: prevExp.paymentMethod,
-        paymentDay: prevExp.paymentDay,
-        isFixed: true,
-        memo: '이전 달 고정지출 복사'
-      });
-      copiedCount++;
-    }
-  }
-
-  alert(`${copiedCount}개의 고정 지출 항목을 복사했습니다.`);
-  await renderExpenses();
 }
 
 async function openExpenseEdit(id) {
@@ -723,14 +768,127 @@ async function handleExpenseUpdate(event) {
 
   try {
     showLoading();
-    await window.StorageService.updateExpense(id, {
-      year, month, category, itemName: name, amount, paymentDay: day, paymentMethod: method, isFixed, memo
-    });
+    if (id === '') {
+      // 신규 등록 로직 작동 (id가 비어있을 때)
+      await window.StorageService.addExpense({
+        year, month, category, itemName: name, amount, paymentDay: day, paymentMethod: method, isFixed, memo
+      });
+    } else {
+      // 기존 수정 로직 작동
+      await window.StorageService.updateExpense(id, {
+        year, month, category, itemName: name, amount, paymentDay: day, paymentMethod: method, isFixed, memo
+      });
+    }
     closeExpenseModal();
     await renderExpenses();
   } catch (err) {
     alert(err.message);
     await renderExpenses();
+  }
+}
+
+// ----------------------------------------------------
+// 신규: 고정지출 템플릿(마스터) 모달 제어 및 서브밋 로직
+// ----------------------------------------------------
+async function openFixedModal(id = null) {
+  const categories = await window.StorageService.getCategories();
+  const methods = await window.StorageService.getPaymentMethods();
+
+  const catSelect = document.getElementById('edit-fixed-category');
+  catSelect.innerHTML = categories.map(c => `<option value="${c.name}">${c.name}</option>`).join('');
+
+  const pmSelect = document.getElementById('edit-fixed-method');
+  pmSelect.innerHTML = methods.map(pm => `<option value="${pm}">${pm}</option>`).join('');
+
+  if (id) {
+    // 수정 모드
+    document.getElementById('fixed-modal-title').innerHTML = `<i data-lucide="edit-3" class="w-5 h-5 text-indigo-500"></i> 고정지출 템플릿 수정`;
+    const list = await window.StorageService.getFixedExpenses();
+    const fixed = list.find(f => f.id === id);
+    if (!fixed) return;
+
+    document.getElementById('edit-fixed-id').value = fixed.id;
+    document.getElementById('edit-fixed-category').value = fixed.category;
+    document.getElementById('edit-fixed-method').value = fixed.paymentMethod;
+    document.getElementById('edit-fixed-name').value = fixed.itemName;
+    document.getElementById('edit-fixed-amount').value = fixed.amount;
+    document.getElementById('edit-fixed-day').value = fixed.paymentDay;
+    document.getElementById('edit-fixed-memo').value = fixed.memo;
+
+    document.getElementById('edit-fixed-start-year').value = fixed.startYear;
+    document.getElementById('edit-fixed-start-month').value = fixed.startMonth;
+    document.getElementById('edit-fixed-end-year').value = fixed.endYear || '';
+    document.getElementById('edit-fixed-end-month').value = fixed.endMonth || '1';
+  } else {
+    // 신규 추가 모드
+    document.getElementById('fixed-modal-title').innerHTML = `<i data-lucide="plus-circle" class="w-5 h-5 text-indigo-500"></i> 고정지출 템플릿 등록`;
+    document.getElementById('edit-fixed-id').value = '';
+    document.getElementById('edit-fixed-name').value = '';
+    document.getElementById('edit-fixed-amount').value = '';
+    document.getElementById('edit-fixed-day').value = '';
+    document.getElementById('edit-fixed-memo').value = '';
+    document.getElementById('edit-fixed-start-year').value = state.selectedYear;
+    document.getElementById('edit-fixed-start-month').value = state.selectedMonth;
+    document.getElementById('edit-fixed-end-year').value = '';
+  }
+
+  document.getElementById('fixed-modal').classList.remove('hidden');
+  lucide.createIcons();
+}
+
+function closeFixedModal() {
+  document.getElementById('fixed-modal').classList.add('hidden');
+}
+
+async function handleFixedExpenseSubmit(event) {
+  event.preventDefault();
+  const id = document.getElementById('edit-fixed-id').value;
+  const category = document.getElementById('edit-fixed-category').value;
+  const method = document.getElementById('edit-fixed-method').value;
+  const name = document.getElementById('edit-fixed-name').value;
+  const amount = document.getElementById('edit-fixed-amount').value;
+  const day = document.getElementById('edit-fixed-day').value;
+  const memo = document.getElementById('edit-fixed-memo').value;
+
+  const startYear = parseInt(document.getElementById('edit-fixed-start-year').value);
+  const startMonth = parseInt(document.getElementById('edit-fixed-start-month').value);
+  const endYearVal = document.getElementById('edit-fixed-end-year').value;
+  const endMonthVal = document.getElementById('edit-fixed-end-month').value;
+
+  const endYear = endYearVal ? parseInt(endYearVal) : null;
+  const endMonth = endYearVal ? parseInt(endMonthVal) : null;
+
+  try {
+    showLoading();
+    if (id) {
+      // 수정
+      await window.StorageService.updateFixedExpense(id, {
+        category, paymentMethod: method, itemName: name, amount, paymentDay: day, startYear, startMonth, endYear, endMonth, memo
+      });
+    } else {
+      // 추가
+      await window.StorageService.addFixedExpense({
+        category, paymentMethod: method, itemName: name, amount, paymentDay: day, startYear, startMonth, endYear, endMonth, memo
+      });
+    }
+    closeFixedModal();
+    await renderExpenses();
+  } catch (err) {
+    alert(err.message);
+    await renderExpenses();
+  }
+}
+
+async function deleteFixedExpenseItem(id) {
+  if (confirm('고정지출 템플릿 원본을 삭제하시겠습니까?\n(원본 삭제 시 앞으로의 달에는 자동 반영되지 않습니다.)')) {
+    try {
+      showLoading();
+      await window.StorageService.deleteFixedExpense(id);
+      await renderExpenses();
+    } catch (err) {
+      alert(err.message);
+      await renderExpenses();
+    }
   }
 }
 
@@ -1188,8 +1346,19 @@ async function renderSettings() {
 
 async function saveSupabaseSettings(event) {
   event.preventDefault();
-  const url = document.getElementById('sb-url').value.trim();
+  let url = document.getElementById('sb-url').value.trim();
   const key = document.getElementById('sb-key').value.trim();
+
+  // 사용자가 복사 시 뒤에 경로(/rest/v1/)를 붙여서 넣은 경우 자동 정제합니다.
+  if (url.endsWith('/')) {
+    url = url.slice(0, -1);
+  }
+  if (url.endsWith('/rest/v1')) {
+    url = url.replace('/rest/v1', '');
+  }
+  if (url.endsWith('/')) {
+    url = url.slice(0, -1);
+  }
 
   try {
     showLoading();
@@ -1222,7 +1391,7 @@ async function migrateLocalData() {
     try {
       showLoading();
       const res = await window.StorageService.migrateLocalToSupabase();
-      alert(`데이터 이전 성공!\n- 결제수단: ${res.paymentMethods}건\n- 카테고리: ${res.categories}건\n- 지출: ${res.expenses}건\n- 수입: ${res.incomes}건이 Supabase DB로 업로드되었습니다.`);
+      alert(`데이터 이전 성공!\n- 결제수단: ${res.paymentMethods}건\n- 카테고리: ${res.categories}건\n- 고정지출 원본: ${res.fixedExpenses}건\n- 지출: ${res.expenses}건\n- 수입: ${res.incomes}건이 Supabase DB로 업로드되었습니다.`);
       await renderSettings();
     } catch (err) {
       alert(err.message);
@@ -1546,7 +1715,6 @@ async function openExcelPreviewModal() {
 async function updateExcelPreviewTable() {
   const tbody = document.getElementById('excel-preview-tbody');
   
-  // 데이터 미리 받기
   const [categories, paymentMethods] = await Promise.all([
     window.StorageService.getCategories(),
     window.StorageService.getPaymentMethods()

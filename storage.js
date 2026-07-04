@@ -15,7 +15,8 @@ const STORAGE_KEYS = {
   EXPENSES: 'ledger_expenses',
   INCOME: 'ledger_income',
   PAYMENT_METHODS: 'ledger_payment_methods',
-  SETTINGS: 'ledger_settings'
+  SETTINGS: 'ledger_settings',
+  FIXED_EXPENSES: 'ledger_fixed_expenses' // 신규: 고정지출 마스터 키
 };
 
 // 1. 초기 기본 데이터 정의
@@ -110,56 +111,71 @@ const Mappers = {
       name: row.name,
       sortOrder: row.sort_order
     };
+  },
+  // 신규: 고정지출 마스터 매퍼
+  fixedExpenseToDB(f) {
+    return {
+      id: f.id,
+      category: f.category,
+      item_name: f.itemName,
+      amount: parseFloat(f.amount),
+      payment_method: f.paymentMethod,
+      payment_day: f.paymentDay || '',
+      start_year: parseInt(f.startYear),
+      start_month: parseInt(f.startMonth),
+      end_year: f.endYear ? parseInt(f.endYear) : null,
+      end_month: f.endMonth ? parseInt(f.endMonth) : null,
+      memo: f.memo || ''
+    };
+  },
+  fixedExpenseFromDB(row) {
+    return {
+      id: row.id,
+      category: row.category,
+      itemName: row.item_name,
+      amount: parseFloat(row.amount),
+      paymentMethod: row.payment_method,
+      paymentDay: row.payment_day,
+      startYear: row.start_year,
+      startMonth: row.start_month,
+      endYear: row.end_year,
+      endMonth: row.end_month,
+      memo: row.memo
+    };
   }
 };
 
 // 3. 지출 및 수입 시드(Seed) 데이터 정의
+function generateSeedFixedExpenses() {
+  // 고정지출 템플릿 마스터 기본 시드 데이터
+  return [
+    { id: 'fixed-1', category: '보험', itemName: '메리츠 보험', amount: 18850, paymentMethod: '계좌자동이체', paymentDay: '5일', startYear: 2026, startMonth: 1, endYear: null, endMonth: null, memo: '고정지출 원본' },
+    { id: 'fixed-2', category: '보험', itemName: '삼성화재 건강보험', amount: 158067, paymentMethod: '계좌자동이체', paymentDay: '5일', startYear: 2026, startMonth: 1, endYear: null, endMonth: null, memo: '고정지출 원본' },
+    { id: 'fixed-3', category: '보험', itemName: 'KB운전자 손해보험', amount: 14093, paymentMethod: '계좌자동이체', paymentDay: '5일', startYear: 2026, startMonth: 1, endYear: null, endMonth: null, memo: '고정지출 원본' },
+    { id: 'fixed-4', category: '가족', itemName: '가족모임', amount: 100000, paymentMethod: '계좌자동이체', paymentDay: '5일', startYear: 2026, startMonth: 1, endYear: null, endMonth: null, memo: '고정지출 원본' },
+    { id: 'fixed-5', category: '가족', itemName: '부모님 용돈', amount: 200000, paymentMethod: '계좌자동이체', paymentDay: '6일', startYear: 2026, startMonth: 1, endYear: null, endMonth: null, memo: '고정지출 원본' },
+    { id: 'fixed-6', category: '가족', itemName: '정수기(본가)', amount: 15900, paymentMethod: '계좌자동이체', paymentDay: '5일', startYear: 2026, startMonth: 1, endYear: null, endMonth: null, memo: '고정지출 원본' },
+    { id: 'fixed-7', category: '저축', itemName: '주택청약', amount: 100000, paymentMethod: '계좌자동이체', paymentDay: '6일', startYear: 2026, startMonth: 1, endYear: null, endMonth: null, memo: '고정지출 원본' },
+    { id: 'fixed-8', category: '저축', itemName: '청년희망적금', amount: 300000, paymentMethod: '계좌자동이체', paymentDay: '만기', startYear: 2026, startMonth: 1, endYear: 2026, endMonth: 2, memo: '2월 만기 완료 예정' },
+    { id: 'fixed-9', category: '저축', itemName: '청년도약계좌', amount: 700000, paymentMethod: '계좌자동이체', paymentDay: '5일', startYear: 2026, startMonth: 1, endYear: null, endMonth: null, memo: '6월만 60만원으로 예외 감액' },
+    { id: 'fixed-10', category: '집', itemName: '월세/관리비', amount: 650000, paymentMethod: '계좌자동이체', paymentDay: '5일', startYear: 2026, startMonth: 1, endYear: null, endMonth: null, memo: '고정지출 원본' },
+    { id: 'fixed-11', category: '집', itemName: '인터넷/TV', amount: 44550, paymentMethod: '계좌자동이체', paymentDay: '21일', startYear: 2026, startMonth: 1, endYear: null, endMonth: null, memo: '고정지출 원본' },
+    { id: 'fixed-12', category: '개인/기타', itemName: '핸드폰', amount: 71050, paymentMethod: '신한카드', paymentDay: '15일', startYear: 2026, startMonth: 1, endYear: null, endMonth: null, memo: '고정지출 원본' },
+    { id: 'fixed-13', category: '개인/기타', itemName: 'ChatGPT 구독', amount: 33282, paymentMethod: '신한카드', paymentDay: '5일', startYear: 2026, startMonth: 1, endYear: null, endMonth: null, memo: '해외 결제 ($22)' },
+    { id: 'fixed-14', category: '카드', itemName: '신한카드 생활비', amount: 1200000, paymentMethod: '신한카드', paymentDay: '5일', startYear: 2026, startMonth: 1, endYear: null, endMonth: null, memo: '대표 한도 설정' },
+    { id: 'fixed-15', category: '카드', itemName: '하나카드 생활비', amount: 150000, paymentMethod: '하나카드', paymentDay: '5일', startYear: 2026, startMonth: 5, endYear: null, endMonth: null, memo: '5월부터 사용 개시' }
+  ];
+}
+
 function generateSeedExpenses() {
   const seed = [];
-  const addMonthlyFixed = (categoryName, itemName, amount, paymentMethod, paymentDay, startMonth = 1, endMonth = 12) => {
-    for (let m = startMonth; m <= endMonth; m++) {
-      seed.push({
-        id: 'seed-exp-' + generateId().substring(5),
-        year: 2026,
-        month: m,
-        category: categoryName,
-        itemName: itemName,
-        amount: amount,
-        paymentMethod: paymentMethod,
-        paymentDay: paymentDay,
-        isFixed: true,
-        memo: '고정지출 기본생성',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      });
-    }
-  };
-
-  addMonthlyFixed('보험', '메리츠 보험', 18850, '계좌자동이체', '5일');
-  addMonthlyFixed('보험', '삼성화재 건강보험', 158067, '계좌자동이체', '5일');
-  addMonthlyFixed('보험', 'KB운전자 손해보험', 14093, '계좌자동이체', '5일');
-  addMonthlyFixed('가족', '가족모임', 100000, '계좌자동이체', '5일');
-  addMonthlyFixed('가족', '부모님 용돈', 200000, '계좌자동이체', '6일');
-  addMonthlyFixed('가족', '정수기(본가)', 15900, '계좌자동이체', '5일');
-  addMonthlyFixed('저축', '주택청약', 100000, '계좌자동이체', '6일');
-  addMonthlyFixed('저축', '청년희망적금', 300000, '계좌자동이체', '만기', 1, 2);
-  addMonthlyFixed('저축', '청년도약계좌', 700000, '계좌자동이체', '5일', 1, 5);
   
-  seed.push({
-    id: 'seed-exp-' + generateId().substring(5), year: 2026, month: 6, category: '저축', itemName: '청년도약계좌', amount: 600000,
-    paymentMethod: '계좌자동이체', paymentDay: '5일', isFixed: true, memo: '6월 특별 감액 조정',
-    createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
-  });
-  
-  addMonthlyFixed('저축', '청년도약계좌', 700000, '계좌자동이체', '5일', 7, 12);
-  addMonthlyFixed('집', '월세/관리비', 650000, '계좌자동이체', '5일');
-  addMonthlyFixed('집', '인터넷/TV', 44550, '계좌자동이체', '21일');
-  
+  // 계절 변동 지출 및 1회성 변동/비정기 지출들만 시드로 주입 (고정지출 템플릿에서 나가는 항목 제외)
   const gasFees = { 1: 29420, 2: 114720, 3: 87720, 4: 76560, 5: 75530, 6: 26350, 7: 16030 };
   Object.keys(gasFees).forEach(month => {
     seed.push({
       id: 'seed-exp-' + generateId().substring(5), year: 2026, month: parseInt(month), category: '집', itemName: '가스비(계절 변동)',
-      amount: gasFees[month], paymentMethod: '계좌자동이체', paymentDay: '10일', isFixed: true, memo: '계절 변동 지출',
+      amount: gasFees[month], paymentMethod: '계좌자동이체', paymentDay: '10일', isFixed: true, memo: '계절 변동 공과금',
       createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
     });
   });
@@ -182,8 +198,7 @@ function generateSeedExpenses() {
     });
   });
 
-  addMonthlyFixed('개인/기타', '핸드폰', 71050, '신한카드', '15일');
-  
+  // 변동 및 비정기 지출들
   seed.push({
     id: 'seed-exp-' + generateId().substring(5), year: 2026, month: 3, category: '개인/기타', itemName: '미용/머리',
     amount: 85000, paymentMethod: '현금', paymentDay: '비정기', isFixed: false, memo: '커트 및 펌',
@@ -192,11 +207,6 @@ function generateSeedExpenses() {
   seed.push({
     id: 'seed-exp-' + generateId().substring(5), year: 2026, month: 5, category: '개인/기타', itemName: '미용/머리',
     amount: 19000, paymentMethod: '현금', paymentDay: '비정기', isFixed: false, memo: '커트',
-    createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
-  });
-  seed.push({
-    id: 'seed-exp-' + generateId().substring(5), year: 2026, month: 1, category: '개인/기타', itemName: 'ChatGPT 구독',
-    amount: 33282, paymentMethod: '신한카드', paymentDay: '5일', isFixed: true, memo: '해외 결제 ($22)',
     createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
   });
   seed.push({
@@ -235,6 +245,14 @@ function generateSeedExpenses() {
     createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
   });
 
+  // 6월 청년도약계좌 특별 감액된 지출 레코드 (조회 시 고정지출 템플릿 70만 원을 덮어씀)
+  seed.push({
+    id: 'exp-special-doyak', year: 2026, month: 6, category: '저축', itemName: '청년도약계좌', amount: 600000,
+    paymentMethod: '계좌자동이체', paymentDay: '5일', isFixed: true, memo: '6월 특별 감액 조정',
+    createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+  });
+
+  // 카드 소비 내역 변동 기록들
   const shinhanCardFees = { 1: 1283070, 2: 1837537, 3: 923565, 4: 2137663, 5: 2235546, 6: 270520, 7: 478521, 8: 332466 };
   Object.keys(shinhanCardFees).forEach(month => {
     seed.push({
@@ -328,6 +346,9 @@ class StorageService {
       if (!localStorage.getItem(STORAGE_KEYS.INCOME)) {
         localStorage.setItem(STORAGE_KEYS.INCOME, JSON.stringify(generateSeedIncome()));
       }
+      if (!localStorage.getItem(STORAGE_KEYS.FIXED_EXPENSES)) {
+        localStorage.setItem(STORAGE_KEYS.FIXED_EXPENSES, JSON.stringify(generateSeedFixedExpenses()));
+      }
     } catch (e) {
       console.error('LocalStorage 초기화 실패:', e);
     }
@@ -338,7 +359,6 @@ class StorageService {
     try {
       const settings = this.getSettingsLocal();
       if (settings.supabaseUrl && settings.supabaseKey) {
-        // 전역 supabase 라이브러리 존재 여부 확인 후 로드
         if (window.supabase) {
           this.supabase = window.supabase.createClient(settings.supabaseUrl, settings.supabaseKey);
           console.log('Supabase 실시간 연동이 정상 활성화되었습니다.');
@@ -382,7 +402,6 @@ class StorageService {
         console.error('Supabase 카테고리 조회 에러, 로컬로 복귀:', e);
       }
     }
-    // LocalStorage Fallback
     const data = localStorage.getItem(STORAGE_KEYS.CATEGORIES);
     return data ? JSON.parse(data).sort((a, b) => a.sortOrder - b.sortOrder) : [];
   }
@@ -427,6 +446,121 @@ class StorageService {
       const categories = await this.getCategories();
       const filtered = categories.filter(c => c.id !== id);
       localStorage.setItem(STORAGE_KEYS.CATEGORIES, JSON.stringify(filtered));
+    }
+    return true;
+  }
+
+  // ----------------------------------------------------
+  // 고정지출 마스터 (FixedExpense Master) 비동기 API
+  // ----------------------------------------------------
+  async getFixedExpenses() {
+    if (this.isSupabaseEnabled()) {
+      try {
+        const { data, error } = await this.supabase
+          .from('ledger_fixed_expenses')
+          .select('*');
+        if (error) throw error;
+        return data.map(Mappers.fixedExpenseFromDB);
+      } catch (e) {
+        console.error('Supabase 고정지출 마스터 조회 에러, 로컬로 복귀:', e);
+      }
+    }
+    const data = localStorage.getItem(STORAGE_KEYS.FIXED_EXPENSES);
+    return data ? JSON.parse(data) : [];
+  }
+
+  async addFixedExpense(fixed) {
+    if (!fixed.category || !fixed.itemName || fixed.amount === undefined || fixed.amount === null) {
+      throw new Error('필수 정보가 누락되었습니다.');
+    }
+    const amountVal = parseFloat(fixed.amount);
+    if (isNaN(amountVal) || amountVal < 0) {
+      throw new Error('금액은 0보다 큰 숫자여야 합니다.');
+    }
+
+    const newFixed = {
+      id: fixed.id || 'fixed-' + generateId(),
+      category: fixed.category,
+      itemName: fixed.itemName.trim(),
+      amount: amountVal,
+      paymentMethod: fixed.paymentMethod || '계좌자동이체',
+      paymentDay: fixed.paymentDay || '',
+      startYear: parseInt(fixed.startYear) || 2026,
+      startMonth: parseInt(fixed.startMonth) || 1,
+      endYear: fixed.endYear ? parseInt(fixed.endYear) : null,
+      endMonth: fixed.endMonth ? parseInt(fixed.endMonth) : null,
+      memo: (fixed.memo || '').trim()
+    };
+
+    if (this.isSupabaseEnabled()) {
+      const { error } = await this.supabase
+        .from('ledger_fixed_expenses')
+        .insert([Mappers.fixedExpenseToDB(newFixed)]);
+      if (error) throw new Error('Supabase 고정지출 템플릿 등록 실패: ' + error.message);
+    } else {
+      const list = await this.getFixedExpenses();
+      list.push(newFixed);
+      localStorage.setItem(STORAGE_KEYS.FIXED_EXPENSES, JSON.stringify(list));
+    }
+    return newFixed;
+  }
+
+  async updateFixedExpense(id, updatedFields) {
+    if (updatedFields.amount !== undefined) {
+      const amountVal = parseFloat(updatedFields.amount);
+      if (isNaN(amountVal) || amountVal < 0) throw new Error('금액 오류');
+    }
+
+    if (this.isSupabaseEnabled()) {
+      const dbFields = {};
+      if (updatedFields.category !== undefined) dbFields.category = updatedFields.category;
+      if (updatedFields.itemName !== undefined) dbFields.item_name = updatedFields.itemName.trim();
+      if (updatedFields.amount !== undefined) dbFields.amount = parseFloat(updatedFields.amount);
+      if (updatedFields.paymentMethod !== undefined) dbFields.payment_method = updatedFields.paymentMethod;
+      if (updatedFields.paymentDay !== undefined) dbFields.payment_day = updatedFields.paymentDay;
+      if (updatedFields.startYear !== undefined) dbFields.start_year = parseInt(updatedFields.startYear);
+      if (updatedFields.startMonth !== undefined) dbFields.start_month = parseInt(updatedFields.startMonth);
+      dbFields.end_year = updatedFields.endYear ? parseInt(updatedFields.endYear) : null;
+      dbFields.end_month = updatedFields.endMonth ? parseInt(updatedFields.endMonth) : null;
+      if (updatedFields.memo !== undefined) dbFields.memo = updatedFields.memo.trim();
+
+      const { error } = await this.supabase
+        .from('ledger_fixed_expenses')
+        .update(dbFields)
+        .eq('id', id);
+      if (error) throw new Error('Supabase 고정지출 템플릿 수정 실패: ' + error.message);
+    } else {
+      const list = await this.getFixedExpenses();
+      const idx = list.findIndex(f => f.id === id);
+      if (idx === -1) throw new Error('고정지출 원본을 찾지 못했습니다.');
+
+      if (updatedFields.category) list[idx].category = updatedFields.category;
+      if (updatedFields.itemName) list[idx].itemName = updatedFields.itemName.trim();
+      if (updatedFields.amount !== undefined) list[idx].amount = parseFloat(updatedFields.amount);
+      if (updatedFields.paymentMethod) list[idx].paymentMethod = updatedFields.paymentMethod;
+      if (updatedFields.paymentDay !== undefined) list[idx].paymentDay = updatedFields.paymentDay;
+      if (updatedFields.startYear !== undefined) list[idx].startYear = parseInt(updatedFields.startYear);
+      if (updatedFields.startMonth !== undefined) list[idx].startMonth = parseInt(updatedFields.startMonth);
+      list[idx].endYear = updatedFields.endYear ? parseInt(updatedFields.endYear) : null;
+      list[idx].endMonth = updatedFields.endMonth ? parseInt(updatedFields.endMonth) : null;
+      if (updatedFields.memo !== undefined) list[idx].memo = updatedFields.memo.trim();
+
+      localStorage.setItem(STORAGE_KEYS.FIXED_EXPENSES, JSON.stringify(list));
+    }
+    return true;
+  }
+
+  async deleteFixedExpense(id) {
+    if (this.isSupabaseEnabled()) {
+      const { error } = await this.supabase
+        .from('ledger_fixed_expenses')
+        .delete()
+        .eq('id', id);
+      if (error) throw new Error('Supabase 고정지출 템플릿 삭제 실패: ' + error.message);
+    } else {
+      const list = await this.getFixedExpenses();
+      const filtered = list.filter(f => f.id !== id);
+      localStorage.setItem(STORAGE_KEYS.FIXED_EXPENSES, JSON.stringify(filtered));
     }
     return true;
   }
@@ -494,7 +628,6 @@ class StorageService {
     }
 
     if (this.isSupabaseEnabled()) {
-      // Supabase 업데이트 처리를 위한 DB 행 구조 변환
       const dbFields = {};
       if (updatedFields.year !== undefined) dbFields.year = parseInt(updatedFields.year);
       if (updatedFields.month !== undefined) dbFields.month = parseInt(updatedFields.month);
@@ -716,7 +849,6 @@ class StorageService {
       const updated = { ...current, ...newSettings };
       localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(updated));
       
-      // Supabase 정보가 갱신되면 클라이언트 인스턴스 재초기화
       this._initializeSupabase();
       return updated;
     } catch (e) {
@@ -726,7 +858,7 @@ class StorageService {
   }
 
   // ----------------------------------------------------
-  // 7. 로컬 데이터를 Supabase로 일괄 백업 마이그레이션 함수
+  // 7. 로컬 데이터를 Supabase로 일괄 백업 마이그레이션 함수 (고정지출 테이블 포함)
   // ----------------------------------------------------
   async migrateLocalToSupabase() {
     if (!this.isSupabaseEnabled()) {
@@ -734,11 +866,11 @@ class StorageService {
     }
 
     try {
-      // 로컬 파일에서 읽기
       const localCats = JSON.parse(localStorage.getItem(STORAGE_KEYS.CATEGORIES) || '[]');
       const localExp = JSON.parse(localStorage.getItem(STORAGE_KEYS.EXPENSES) || '[]');
       const localInc = JSON.parse(localStorage.getItem(STORAGE_KEYS.INCOME) || '[]');
       const localMethods = JSON.parse(localStorage.getItem(STORAGE_KEYS.PAYMENT_METHODS) || '[]');
+      const localFixed = JSON.parse(localStorage.getItem(STORAGE_KEYS.FIXED_EXPENSES) || '[]'); // 신규
 
       // 1. 결제 수단 업서트
       if (localMethods.length > 0) {
@@ -758,7 +890,16 @@ class StorageService {
         if (error) throw new Error('카테고리 동기화 실패: ' + error.message);
       }
 
-      // 3. 지출 내역 업서트
+      // 3. 고정지출 템플릿 업서트 (신규)
+      if (localFixed.length > 0) {
+        const payload = localFixed.map(Mappers.fixedExpenseToDB);
+        const { error } = await this.supabase
+          .from('ledger_fixed_expenses')
+          .upsert(payload, { onConflict: 'id' });
+        if (error) throw new Error('고정지출 원본 동기화 실패: ' + error.message);
+      }
+
+      // 4. 지출 내역 업서트
       if (localExp.length > 0) {
         const payload = localExp.map(Mappers.expenseToDB);
         const { error } = await this.supabase
@@ -767,7 +908,7 @@ class StorageService {
         if (error) throw new Error('지출 내역 동기화 실패: ' + error.message);
       }
 
-      // 4. 수입 내역 업서트
+      // 5. 수입 내역 업서트
       if (localInc.length > 0) {
         const payload = localInc.map(Mappers.incomeToDB);
         const { error } = await this.supabase
@@ -780,7 +921,8 @@ class StorageService {
         categories: localCats.length,
         expenses: localExp.length,
         incomes: localInc.length,
-        paymentMethods: localMethods.length
+        paymentMethods: localMethods.length,
+        fixedExpenses: localFixed.length // 신규
       };
 
     } catch (err) {
