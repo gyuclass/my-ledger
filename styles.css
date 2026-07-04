@@ -1,0 +1,181 @@
+/* 
+   가계부 MVP 프리미엄 디자인 시스템 및 테마 
+   모든 한글 주석 적용, 모던하고 부드러운 인터랙션 지향
+*/
+
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Noto+Sans+KR:wght@300;400;500;700&display=swap');
+
+:root {
+  --font-sans: 'Outfit', 'Noto Sans KR', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+body {
+  font-family: var(--font-sans);
+  background: linear-gradient(135deg, #f5f7fa 0%, #e4e8f0 100%);
+  min-height: 100vh;
+  color: #1e293b;
+}
+
+/* 스크롤바 커스텀 */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(241, 245, 249, 0.5);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.5);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 116, 139, 0.7);
+}
+
+/* 글래스모피즘 카드 테마 */
+.glass-card {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.04);
+}
+
+/* 입력 필드 포커스 및 호버 스타일링 */
+.input-premium {
+  background: rgba(255, 255, 255, 0.8);
+  border: 1px solid rgba(203, 213, 225, 1);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.input-premium:focus {
+  background: #ffffff;
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+  outline: none;
+}
+
+/* 호버 시 은은한 상승 효과 */
+.hover-lift {
+  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s ease;
+}
+
+.hover-lift:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 24px -10px rgba(99, 102, 241, 0.15);
+}
+
+/* 엑셀 형태 연간 표의 가독성 극대화 */
+.yearly-grid-container {
+  overflow-x: auto;
+  border-radius: 0.75rem;
+  border: 1px solid rgba(226, 232, 240, 0.8);
+}
+
+.yearly-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.yearly-table th,
+.yearly-table td {
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.8);
+  border-right: 1px solid rgba(226, 232, 240, 0.5);
+  white-space: nowrap;
+}
+
+.yearly-table th:last-child,
+.yearly-table td:last-child {
+  border-right: none;
+}
+
+/* 표 첫번째 열(분류/항목명) 고정 (Sticky Column) */
+.yearly-table th.sticky-col,
+.yearly-table td.sticky-col {
+  position: sticky;
+  left: 0;
+  background-color: #f8fafc;
+  z-index: 10;
+  box-shadow: 2px 0 5px -2px rgba(0, 0, 0, 0.1);
+  border-right: 1px solid rgba(226, 232, 240, 1);
+}
+
+.yearly-table tr:hover td {
+  background-color: rgba(241, 245, 249, 0.8) !important;
+}
+
+.yearly-table tr:hover td.sticky-col {
+  background-color: rgba(241, 245, 249, 1) !important;
+}
+
+/* 엑셀 요약 행 디자인 */
+.summary-row {
+  background-color: #f1f5f9 !important;
+  font-weight: 600;
+}
+
+.summary-row td {
+  border-top: 1px double #cbd5e1;
+  border-bottom: 2px double #cbd5e1;
+}
+
+/* 금액 우측 정렬 */
+.amount-cell {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 음수 마이너스 표시 색상 */
+.negative-amount {
+  color: #ef4444;
+}
+
+.positive-amount {
+  color: #10b981;
+}
+
+/* 액티브 탭 스타일 */
+.tab-btn {
+  position: relative;
+  transition: color 0.2s ease;
+}
+
+.tab-btn.active::after {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  left: 10%;
+  width: 80%;
+  height: 3px;
+  background-color: #6366f1;
+  border-radius: 9999px;
+  animation: tab-slide 0.2s ease-out;
+}
+
+@keyframes tab-slide {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+/* 엑셀 파일 드롭존(Dropzone) 스타일 */
+.excel-dropzone {
+  border: 2px dashed #cbd5e1;
+  background-color: rgba(248, 250, 252, 0.6);
+  transition: all 0.2s ease-in-out;
+}
+
+.excel-dropzone.dragover {
+  border-color: #6366f1;
+  background-color: rgba(99, 102, 241, 0.05);
+  transform: scale(0.99);
+}
