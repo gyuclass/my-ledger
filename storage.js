@@ -170,105 +170,153 @@ function generateSeedFixedExpenses() {
 function generateSeedExpenses() {
   const seed = [];
   
-  // 계절 변동 지출 및 1회성 변동/비정기 지출들만 시드로 주입 (고정지출 템플릿에서 나가는 항목 제외)
-  const gasFees = { 1: 29420, 2: 114720, 3: 87720, 4: 76560, 5: 75530, 6: 26350, 7: 16030 };
+  // ====================================================
+  // [변동 공과금] 계절에 따라 달마다 다른 금액 - 고정 ID 적용
+  // ====================================================
+
+  // 가스비 (계절 변동) - 엑셀 1월~6월 실측치
+  const gasFees = { 1: 114720, 2: 87720, 3: 76560, 4: 75530, 5: 26350, 6: 16030 };
   Object.keys(gasFees).forEach(month => {
     seed.push({
-      id: 'seed-exp-' + generateId().substring(5), year: 2026, month: parseInt(month), category: '집', itemName: '가스비(계절 변동)',
-      amount: gasFees[month], paymentMethod: '계좌자동이체', paymentDay: '10일', isFixed: true, memo: '계절 변동 공과금',
-      createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+      id: `seed-exp-gas-2026-${month}`,
+      year: 2026, month: parseInt(month), category: '집', itemName: '가스비(난방)',
+      amount: gasFees[month], paymentMethod: '계좌자동이체', paymentDay: '10일',
+      isFixed: false, memo: '※ 변동 공과금',
+      createdAt: new Date('2026-01-01T00:00:00Z').toISOString(), updatedAt: new Date().toISOString()
     });
   });
 
-  const electricityFees = { 1: 21710, 2: 24570, 3: 26840, 4: 26080, 5: 21100, 6: 23670, 7: 21100 };
+  // 전기요금 (변동) - 엑셀 1월~6월 실측치
+  const electricityFees = { 1: 24570, 2: 26840, 3: 26080, 4: 21100, 5: 23670, 6: 21100 };
   Object.keys(electricityFees).forEach(month => {
     seed.push({
-      id: 'seed-exp-' + generateId().substring(5), year: 2026, month: parseInt(month), category: '집', itemName: '전기',
-      amount: electricityFees[month], paymentMethod: '계좌자동이체', paymentDay: '5일', isFixed: true, memo: '전기요금',
-      createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+      id: `seed-exp-elec-2026-${month}`,
+      year: 2026, month: parseInt(month), category: '집', itemName: '전기',
+      amount: electricityFees[month], paymentMethod: '계좌자동이체', paymentDay: '5일',
+      isFixed: false, memo: '※ 변동 공과금',
+      createdAt: new Date('2026-01-01T00:00:00Z').toISOString(), updatedAt: new Date().toISOString()
     });
   });
 
-  const waterFees = { 1: 27535, 3: 42342, 5: 26401, 7: 24145 };
+  // 수도요금 (격월) - 엑셀 2월, 4월, 6월 실측치
+  const waterFees = { 2: 42342, 4: 26401, 6: 24145 };
   Object.keys(waterFees).forEach(month => {
     seed.push({
-      id: 'seed-exp-' + generateId().substring(5), year: 2026, month: parseInt(month), category: '집', itemName: '수도',
-      amount: waterFees[month], paymentMethod: '계좌자동이체', paymentDay: '5일', isFixed: true, memo: '수도요금 (격월)',
-      createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+      id: `seed-exp-water-2026-${month}`,
+      year: 2026, month: parseInt(month), category: '집', itemName: '수도',
+      amount: waterFees[month], paymentMethod: '계좌자동이체', paymentDay: '5일',
+      isFixed: false, memo: '※ 격월 변동',
+      createdAt: new Date('2026-01-01T00:00:00Z').toISOString(), updatedAt: new Date().toISOString()
     });
   });
 
-  // 변동 및 비정기 지출들
-  seed.push({
-    id: 'seed-exp-' + generateId().substring(5), year: 2026, month: 3, category: '개인/기타', itemName: '미용/머리',
-    amount: 85000, paymentMethod: '현금', paymentDay: '비정기', isFixed: false, memo: '커트 및 펌',
-    createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
-  });
-  seed.push({
-    id: 'seed-exp-' + generateId().substring(5), year: 2026, month: 5, category: '개인/기타', itemName: '미용/머리',
-    amount: 19000, paymentMethod: '현금', paymentDay: '비정기', isFixed: false, memo: '커트',
-    createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
-  });
-  seed.push({
-    id: 'seed-exp-' + generateId().substring(5), year: 2026, month: 3, category: '개인/기타', itemName: '헬스장(다개월)',
-    amount: 440000, paymentMethod: '신한카드', paymentDay: '9/8까지', isFixed: false, memo: '5개월 회원권',
-    createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
-  });
-  seed.push({
-    id: 'seed-exp-' + generateId().substring(5), year: 2026, month: 3, category: '기타(비정기)', itemName: '마이너스통장 상환',
-    amount: 1000000, paymentMethod: '계좌자동이체', paymentDay: '비정기', isFixed: false, memo: '일부 상환',
-    createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
-  });
-  seed.push({
-    id: 'seed-exp-' + generateId().substring(5), year: 2026, month: 4, category: '기타(비정기)', itemName: '마이너스통장 상환',
-    amount: 1000000, paymentMethod: '계좌자동이체', paymentDay: '비정기', isFixed: false, memo: '일부 상환',
-    createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
-  });
-  seed.push({
-    id: 'seed-exp-' + generateId().substring(5), year: 2026, month: 3, category: '기타(비정기)', itemName: '타이어 교체',
-    amount: 1220000, paymentMethod: '신한카드', paymentDay: '비정기', isFixed: false, memo: '타이어 교환',
-    createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
-  });
-  seed.push({
-    id: 'seed-exp-' + generateId().substring(5), year: 2026, month: 2, category: '기타(비정기)', itemName: '자동차보험',
-    amount: 751450, paymentMethod: '신한카드', paymentDay: '연1회', isFixed: false, memo: '갱신 결제',
-    createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
-  });
-  seed.push({
-    id: 'seed-exp-' + generateId().substring(5), year: 2026, month: 1, category: '기타(비정기)', itemName: '자동차세',
-    amount: 140710, paymentMethod: '계좌자동이체', paymentDay: '연납', isFixed: false, memo: '연납 분할',
-    createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
-  });
-  seed.push({
-    id: 'seed-exp-' + generateId().substring(5), year: 2026, month: 2, category: '기타(비정기)', itemName: '자동차세',
-    amount: 244120, paymentMethod: '계좌자동이체', paymentDay: '연납', isFixed: false, memo: '지방세 납부',
-    createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
-  });
+  // ====================================================
+  // [카드 실소비] 매달 실사용액이 다른 변동 지출
+  // ====================================================
 
-  // 6월 청년도약계좌 특별 감액된 지출 레코드 (조회 시 고정지출 템플릿 70만 원을 덮어씀)
-  seed.push({
-    id: 'exp-special-doyak', year: 2026, month: 6, category: '저축', itemName: '청년도약계좌', amount: 600000,
-    paymentMethod: '계좌자동이체', paymentDay: '5일', isFixed: true, memo: '6월 특별 감액 조정',
-    createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
-  });
-
-  // 카드 소비 내역 변동 기록들
-  const shinhanCardFees = { 1: 1283070, 2: 1837537, 3: 923565, 4: 2137663, 5: 2235546, 6: 270520, 7: 478521, 8: 332466 };
+  // 신한카드 실 소비 합산 (변동)
+  const shinhanCardFees = { 1: 1837537, 2: 923565, 3: 2137663, 4: 2235546, 5: 270520, 6: 478521, 7: 332466 };
   Object.keys(shinhanCardFees).forEach(month => {
     seed.push({
-      id: 'seed-exp-' + generateId().substring(5), year: 2026, month: parseInt(month), category: '카드', itemName: '신한카드 생활비',
-      amount: shinhanCardFees[month], paymentMethod: '신한카드', paymentDay: '5일', isFixed: true, memo: '카드생활비 합산',
-      createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+      id: `seed-exp-shinhan-2026-${month}`,
+      year: 2026, month: parseInt(month), category: '카드', itemName: '신한카드 생활비',
+      amount: shinhanCardFees[month], paymentMethod: '신한카드', paymentDay: '5일',
+      isFixed: false, memo: '※ 변동 (월별 실소비)',
+      createdAt: new Date('2026-01-01T00:00:00Z').toISOString(), updatedAt: new Date().toISOString()
     });
   });
 
+  // 하나카드 실 소비 합산 (변동) - 5월부터
   const hanaCardFees = { 5: 1876611, 6: 1633682, 7: 1079412 };
   Object.keys(hanaCardFees).forEach(month => {
     seed.push({
-      id: 'seed-exp-' + generateId().substring(5), year: 2026, month: parseInt(month), category: '카드', itemName: '하나카드 생활비',
-      amount: hanaCardFees[month], paymentMethod: '하나카드', paymentDay: '5일', isFixed: true, memo: '카드생활비 합산',
-      createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+      id: `seed-exp-hana-2026-${month}`,
+      year: 2026, month: parseInt(month), category: '카드', itemName: '하나카드 생활비',
+      amount: hanaCardFees[month], paymentMethod: '하나카드', paymentDay: '5일',
+      isFixed: false, memo: '※ 변동 (월별 실소비)',
+      createdAt: new Date('2026-01-01T00:00:00Z').toISOString(), updatedAt: new Date().toISOString()
     });
+  });
+
+  // ====================================================
+  // [비정기 지출] 특정 달에만 발생한 1회성 지출
+  // ====================================================
+
+  // 미용/머리
+  seed.push({
+    id: 'seed-exp-hair-2026-2',
+    year: 2026, month: 2, category: '개인/기타', itemName: '미용/머리',
+    amount: 85000, paymentMethod: '현금', paymentDay: '비정기',
+    isFixed: false, memo: '커트 및 펌',
+    createdAt: new Date('2026-02-01T00:00:00Z').toISOString(), updatedAt: new Date().toISOString()
+  });
+  seed.push({
+    id: 'seed-exp-hair-2026-4',
+    year: 2026, month: 4, category: '개인/기타', itemName: '미용/머리',
+    amount: 19000, paymentMethod: '현금', paymentDay: '비정기',
+    isFixed: false, memo: '커트',
+    createdAt: new Date('2026-04-01T00:00:00Z').toISOString(), updatedAt: new Date().toISOString()
+  });
+
+  // 헬스장 다개월 등록
+  seed.push({
+    id: 'seed-exp-gym-2026-2',
+    year: 2026, month: 2, category: '개인/기타', itemName: '헬스장(다개월)',
+    amount: 440000, paymentMethod: '신한카드', paymentDay: '9/8까지',
+    isFixed: false, memo: '5개월 회원권',
+    createdAt: new Date('2026-02-01T00:00:00Z').toISOString(), updatedAt: new Date().toISOString()
+  });
+
+  // 마이너스통장 상환
+  seed.push({
+    id: 'seed-exp-loan-2026-2',
+    year: 2026, month: 2, category: '기타(비정기)', itemName: '마이너스통장 상환',
+    amount: 1000000, paymentMethod: '계좌자동이체', paymentDay: '비정기',
+    isFixed: false, memo: '일부 상환',
+    createdAt: new Date('2026-02-01T00:00:00Z').toISOString(), updatedAt: new Date().toISOString()
+  });
+  seed.push({
+    id: 'seed-exp-loan-2026-3',
+    year: 2026, month: 3, category: '기타(비정기)', itemName: '마이너스통장 상환',
+    amount: 1000000, paymentMethod: '계좌자동이체', paymentDay: '비정기',
+    isFixed: false, memo: '일부 상환',
+    createdAt: new Date('2026-03-01T00:00:00Z').toISOString(), updatedAt: new Date().toISOString()
+  });
+
+  // 타이어 교체
+  seed.push({
+    id: 'seed-exp-tire-2026-2',
+    year: 2026, month: 2, category: '기타(비정기)', itemName: '타이어 교체',
+    amount: 1220000, paymentMethod: '신한카드', paymentDay: '비정기',
+    isFixed: false, memo: '타이어 교환',
+    createdAt: new Date('2026-02-01T00:00:00Z').toISOString(), updatedAt: new Date().toISOString()
+  });
+
+  // 자동차보험 연1회
+  seed.push({
+    id: 'seed-exp-carins-2026-1',
+    year: 2026, month: 1, category: '기타(비정기)', itemName: '자동차보험',
+    amount: 751450, paymentMethod: '신한카드', paymentDay: '연1회',
+    isFixed: false, memo: '갱신 결제',
+    createdAt: new Date('2026-01-01T00:00:00Z').toISOString(), updatedAt: new Date().toISOString()
+  });
+
+  // 자동차세 연납
+  seed.push({
+    id: 'seed-exp-cartax-2026-1',
+    year: 2026, month: 1, category: '기타(비정기)', itemName: '자동차세',
+    amount: 244120, paymentMethod: '계좌자동이체', paymentDay: '연납',
+    isFixed: false, memo: '지방세 납부',
+    createdAt: new Date('2026-01-01T00:00:00Z').toISOString(), updatedAt: new Date().toISOString()
+  });
+
+  // 청년도약계좌 6월 특별 감액 (70만→60만)
+  seed.push({
+    id: 'exp-special-doyak',
+    year: 2026, month: 6, category: '저축', itemName: '청년도약계좌',
+    amount: 600000, paymentMethod: '계좌자동이체', paymentDay: '5일',
+    isFixed: true, memo: '6월 특별 감액 (70만→60만)',
+    createdAt: new Date('2026-06-01T00:00:00Z').toISOString(), updatedAt: new Date().toISOString()
   });
 
   return seed;
@@ -277,42 +325,44 @@ function generateSeedExpenses() {
 function generateSeedIncome() {
   const seed = [];
   const monthlySalary = {
-    1: { amount: 4703928, memo: '연차 수당 포함' },
-    2: { amount: 4795703, memo: '급여 및 연말정산 소급분' },
-    3: { amount: 3709010, memo: '기본 급여' },
-    4: { amount: 3382040, memo: '명절 수당 포함' },
-    5: { amount: 3697670, memo: '기본 급여' },
-    6: { amount: 3697670, memo: '기본 급여' },
-    7: { amount: 3697670, memo: '기본 급여' }
+    1: { amount: 3411820, name: '12월 급여(1월)', memo: '12월 근무 급여' },
+    2: { amount: 4703928, name: '1월 급여(2월)', memo: '연차 8.5개 포함' },
+    3: { amount: 4795703, name: '2월 급여(3월)', memo: '기본 급여 및 정산' },
+    4: { amount: 3709010, name: '3월 급여(4월)', memo: '기본 급여' },
+    5: { amount: 3382040, name: '4월 급여(5월)', memo: '건강보험 정산 반영' },
+    6: { amount: 3697670, name: '5월 급여(6월)', memo: '기본 급여' },
+    7: { amount: 3697670, name: '6월 급여(7월)', memo: '기본 급여' }
   };
 
   Object.keys(monthlySalary).forEach(month => {
     seed.push({
-      id: 'seed-inc-' + generateId().substring(5),
+      id: `seed-inc-salary-2026-${month}`,
       year: 2026,
       month: parseInt(month),
-      incomeName: `${month}월 급여`,
+      incomeName: monthlySalary[month].name,
       amount: monthlySalary[month].amount,
       memo: monthlySalary[month].memo,
-      createdAt: new Date().toISOString(),
+      createdAt: new Date('2026-01-01T00:00:00Z').toISOString(),
       updatedAt: new Date().toISOString()
     });
   });
 
+  // 3월 가계부(2월급여 줄)의 보너스 수입 연동
   seed.push({
-    id: 'seed-inc-' + generateId().substring(5), year: 2026, month: 2, incomeName: '기타 보너스 수입', amount: 1827250,
-    memo: '보너스 정산분', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+    id: 'seed-inc-bonus-2026-3', 
+    year: 2026, month: 3, incomeName: '2월 기타 보너스 수입', amount: 1827250,
+    memo: '연말+소급분 정산', createdAt: new Date('2026-03-01T00:00:00Z').toISOString(), updatedAt: new Date().toISOString()
   });
 
   for (let m = 8; m <= 12; m++) {
     seed.push({
-      id: 'seed-inc-' + generateId().substring(5),
+      id: `seed-inc-salary-2026-${m}`,
       year: 2026,
       month: m,
-      incomeName: `${m}월 급여`,
+      incomeName: `${m - 1}월 급여(${m}월)`,
       amount: 3697670,
       memo: '기본 급여 (추정)',
-      createdAt: new Date().toISOString(),
+      createdAt: new Date('2026-08-01T00:00:00Z').toISOString(),
       updatedAt: new Date().toISOString()
     });
   }
@@ -340,12 +390,21 @@ class StorageService {
       if (!localStorage.getItem(STORAGE_KEYS.SETTINGS)) {
         localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(DEFAULT_SETTINGS));
       }
-      if (!localStorage.getItem(STORAGE_KEYS.EXPENSES)) {
+
+      // 지출 데이터 v2 강제 갱신 (고정 ID + ※변동 표시 + 엑셀 실측치 적용)
+      const expensesVer = localStorage.getItem('expenses_data_version');
+      if (expensesVer !== 'v2' || !localStorage.getItem(STORAGE_KEYS.EXPENSES)) {
         localStorage.setItem(STORAGE_KEYS.EXPENSES, JSON.stringify(generateSeedExpenses()));
+        localStorage.setItem('expenses_data_version', 'v2');
       }
-      if (!localStorage.getItem(STORAGE_KEYS.INCOME)) {
+
+      // 수입 엑셀 실측치 v3 강제 적재 로직
+      const incomeVer = localStorage.getItem('incomes_data_version');
+      if (incomeVer !== 'v3' || !localStorage.getItem(STORAGE_KEYS.INCOME)) {
         localStorage.setItem(STORAGE_KEYS.INCOME, JSON.stringify(generateSeedIncome()));
+        localStorage.setItem('incomes_data_version', 'v3');
       }
+
       if (!localStorage.getItem(STORAGE_KEYS.FIXED_EXPENSES)) {
         localStorage.setItem(STORAGE_KEYS.FIXED_EXPENSES, JSON.stringify(generateSeedFixedExpenses()));
       }

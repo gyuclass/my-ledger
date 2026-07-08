@@ -70,7 +70,8 @@ body {
 
 /* 엑셀 형태 연간 표의 가독성 극대화 */
 .yearly-grid-container {
-  overflow-x: auto;
+  overflow: auto;
+  max-height: 70vh; /* 세로 스크롤 시 헤더 고정을 위해 최대 높이 설정 */
   border-radius: 0.75rem;
   border: 1px solid rgba(226, 232, 240, 0.8);
 }
@@ -83,7 +84,7 @@ body {
 
 .yearly-table th,
 .yearly-table td {
-  padding: 0.5rem 0.75rem;
+  padding: 0.625rem 0.875rem;
   font-size: 0.875rem;
   border-bottom: 1px solid rgba(226, 232, 240, 0.8);
   border-right: 1px solid rgba(226, 232, 240, 0.5);
@@ -95,22 +96,53 @@ body {
   border-right: none;
 }
 
-/* 표 첫번째 열(분류/항목명) 고정 (Sticky Column) */
-.yearly-table th.sticky-col,
-.yearly-table td.sticky-col {
+/* 세로 스크롤 시 헤더(thead) 고정 */
+.yearly-table thead th {
+  position: sticky;
+  top: 0;
+  background-color: #f8fafc;
+  z-index: 20;
+  border-bottom: 2px solid rgba(226, 232, 240, 1);
+}
+
+/* 가로 스크롤 시 1단, 2단, 3단 열 왼쪽 고정 (Sticky Columns) */
+.yearly-table .sticky-col-1 {
   position: sticky;
   left: 0;
-  background-color: #f8fafc;
   z-index: 10;
-  box-shadow: 2px 0 5px -2px rgba(0, 0, 0, 0.1);
-  border-right: 1px solid rgba(226, 232, 240, 1);
+  background-color: #f8fafc;
+  border-right: 1px solid rgba(226, 232, 240, 1) !important;
 }
+
+.yearly-table .sticky-col-2 {
+  position: sticky;
+  left: 90px; /* 1단 분류 너비 만큼 뜀 */
+  z-index: 10;
+  background-color: #f8fafc;
+  border-right: 1px solid rgba(226, 232, 240, 1) !important;
+}
+
+.yearly-table .sticky-col-3 {
+  position: sticky;
+  left: 220px; /* 1단(90px) + 2단(130px) 너비 만큼 뜀 */
+  z-index: 10;
+  background-color: #f8fafc;
+  border-right: 1px solid rgba(226, 232, 240, 1) !important;
+  box-shadow: 3px 0 5px -2px rgba(0, 0, 0, 0.08); /* 스크롤 시 경계 섀도우 */
+}
+
+/* 헤더 셀이 가로/세로 동시 고정될 때의 z-index 보정 */
+.yearly-table thead th.sticky-col-1 { z-index: 40; }
+.yearly-table thead th.sticky-col-2 { z-index: 40; }
+.yearly-table thead th.sticky-col-3 { z-index: 40; }
 
 .yearly-table tr:hover td {
   background-color: rgba(241, 245, 249, 0.8) !important;
 }
 
-.yearly-table tr:hover td.sticky-col {
+.yearly-table tr:hover td.sticky-col-1,
+.yearly-table tr:hover td.sticky-col-2,
+.yearly-table tr:hover td.sticky-col-3 {
   background-color: rgba(241, 245, 249, 1) !important;
 }
 

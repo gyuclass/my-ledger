@@ -406,38 +406,32 @@ function drawCategoryChart(monthExpenses) {
 // 2. 지출 관리 탭 (Expenses) - UI 2단 레이아웃 개편
 // ----------------------------------------------------
 
-// 신규: 고정지출 템플릿(마스터)의 해당 연월 유효성 검사기
+// 고정지출 템플릿(마스터)의 해당 연월 유효성 검사기
 function isFixedExpenseValidForMonth(fixed, targetYear, targetMonth) {
-  // 시작 연월 조건 만족 여부
   const startVal = fixed.startYear * 100 + fixed.startMonth;
   const targetVal = targetYear * 100 + targetMonth;
   if (targetVal < startVal) return false;
 
-  // 종료 연월 지정 시 만료 여부 확인
   if (fixed.endYear && fixed.endMonth) {
     const endVal = fixed.endYear * 100 + fixed.endMonth;
-    if (targetVal > endVal) return false; // 만기 월 이후면 무효
+    if (targetVal > endVal) return false;
   }
   return true;
 }
 
-// 신규: 렌더링 전 고정지출 템플릿의 지출 내역 자동 주입 동기화 함수
+// 렌더링 전 고정지출 템플릿의 지출 내역 자동 주입 동기화 함수
 async function syncFixedExpensesForMonth(targetYear, targetMonth) {
   const [fixedList, currentExpenses] = await Promise.all([
     window.StorageService.getFixedExpenses(),
     window.StorageService.getExpenses()
   ]);
 
-  // 이번 달에 속하는 활성 지출 필터
   const thisMonthExpenses = currentExpenses.filter(e => e.year === targetYear && e.month === targetMonth);
-
-  // 이번 달에 유효한 고정비 마스터 템플릿 필터
   const validFixedTemplates = fixedList.filter(f => isFixedExpenseValidForMonth(f, targetYear, targetMonth));
 
   let insertedCount = 0;
 
   for (const t of validFixedTemplates) {
-    // 이미 동일한 이름과 카테고리로 생성된 지출이 존재하는지 검증
     const exists = thisMonthExpenses.some(e => e.itemName === t.itemName && e.category === t.category);
     if (!exists) {
       await window.StorageService.addExpense({
@@ -448,7 +442,7 @@ async function syncFixedExpensesForMonth(targetYear, targetMonth) {
         amount: t.amount,
         paymentMethod: t.paymentMethod,
         paymentDay: t.paymentDay,
-        isFixed: true, // 고정지출 마킹
+        isFixed: true,
         memo: t.memo ? `(자동주입) ${t.memo}` : '고정지출 자동반영'
       });
       insertedCount++;
@@ -466,20 +460,31 @@ async function renderExpenses() {
   // 0. 고정지출 싱크 자동 실행 (조회하는 달에 맞는 템플릿 실시간 동기화)
   await syncFixedExpensesForMonth(state.selectedYear, state.selectedMonth);
 
-  // 1. 데이터 일괄 조회 대기
-  const [categories, paymentMethods, allExpenses, fixedList] = await Promise.all([
+  // 1. 데이터 일괄 조회 대기 (실시간 월 집계 계산용 수입 데이터도 함께 쿼리)
+  const [categories, paymentMethods, allExpenses, fixedList, allIncomes] = await Promise.all([
     window.StorageService.getCategories(),
     window.StorageService.getPaymentMethods(),
     window.StorageService.getExpenses(),
-    window.StorageService.getFixedExpenses()
+    window.StorageService.getFixedExpenses(),
+    window.StorageService.getIncomes()
   ]);
   
   // 현재 월의 유효한 고정지출 템플릿
   const currentMonthFixedTemplates = fixedList.filter(f => isFixedExpenseValidForMonth(f, state.selectedYear, state.selectedMonth));
   
-  // 현재 조회하는 연월의 지출 내역
+  // 신규: 이번 달 유효한 고정지출의 합계 금액 계산 (추가/수정 시 즉각 실시간 반영용)
+  const totalFixedAmount = currentMonthFixedTemplates.reduce((sum, f) => sum + f.amount, 0);
+
+  // 현재 조회하는 연월의 지출 및 수입 내역 (콤마 실시간 대시보드 계산용)
   let expenses = allExpenses.filter(e => e.year === state.selectedYear && e.month === state.selectedMonth);
+  const incomes = allIncomes.filter(i => i.year === state.selectedYear && i.month === state.selectedMonth);
     
+  // 실시간 합계 구하기
+  const totalMonthExpense = expenses.reduce((sum, e) => sum + e.amount, 0);
+  const totalMonthIncome = incomes.reduce((sum, i) => sum + i.amount, 0);
+  const monthBalance = totalMonthIncome - totalMonthExpense;
+
+  // 필터 분기
   if (state.expenseFilter.category !== 'all') {
     expenses = expenses.filter(e => e.category === state.expenseFilter.category);
   }
@@ -491,16 +496,47 @@ async function renderExpenses() {
 
   // 2단 분리 레이아웃 구조 렌더링
   container.innerHTML = `
+    <!-- 지출관리 맨 위의 실시간 미니 요약 대시보드 -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+      <div class="glass-card rounded-xl p-4 bg-emerald-50/40 border border-emerald-100/50 flex justify-between items-center hover-lift">
+        <div>
+          <span class="text-[10px] font-bold text-slate-400 block uppercase tracking-wider">${state.selectedMonth}월 총 수입</span>
+          <span class="text-base font-extrabold text-emerald-600">${formatWon(totalMonthIncome)}</span>
+        </div>
+        <div class="bg-emerald-100/50 text-emerald-600 p-2 rounded-lg"><i data-lucide="trending-up" class="w-4 h-4"></i></div>
+      </div>
+      
+      <div class="glass-card rounded-xl p-4 bg-indigo-50/30 border border-indigo-100/30 flex justify-between items-center hover-lift">
+        <div>
+          <span class="text-[10px] font-bold text-slate-400 block uppercase tracking-wider">${state.selectedMonth}월 총 지출</span>
+          <span class="text-base font-extrabold text-indigo-600">${formatWon(totalMonthExpense)}</span>
+        </div>
+        <div class="bg-indigo-100/40 text-indigo-600 p-2 rounded-lg"><i data-lucide="credit-card" class="w-4 h-4"></i></div>
+      </div>
+
+      <div class="glass-card rounded-xl p-4 ${monthBalance >= 0 ? 'bg-emerald-50/40 border-emerald-100/50' : 'bg-red-50/30 border-red-100/30'} flex justify-between items-center hover-lift">
+        <div>
+          <span class="text-[10px] font-bold text-slate-400 block uppercase tracking-wider">${state.selectedMonth}월 순 잔액</span>
+          <span class="text-base font-extrabold ${monthBalance >= 0 ? 'text-emerald-600' : 'text-red-500'}">${formatWon(monthBalance)}</span>
+        </div>
+        <div class="p-2 rounded-lg ${monthBalance >= 0 ? 'bg-emerald-100/50 text-emerald-600' : 'bg-red-100/50 text-red-500'}">
+          <i data-lucide="${monthBalance >= 0 ? 'smile' : 'frown'}" class="w-4 h-4"></i>
+        </div>
+      </div>
+    </div>
+
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
       
-      <!-- [좌측 단] 고정지출 마스터 관리 섹션 (1/3 너비) -->
+      <!-- [좌측 단] 고정지출 원본 관리 섹션 (신규: 고정지출 유효 총합 위젯 탑재) -->
       <div class="glass-card rounded-2xl p-6 flex flex-col h-fit">
-        <div class="flex items-center justify-between mb-4 border-b border-slate-100 pb-3">
-          <h3 class="text-sm font-bold text-slate-700 flex items-center gap-1.5">
-            <i data-lucide="pin" class="w-4 h-4 text-indigo-500"></i>
-            고정지출 원본 관리
+        <div class="flex items-start justify-between mb-4 border-b border-slate-100 pb-3">
+          <h3 class="text-sm font-bold text-slate-700 flex flex-col">
+            <span class="flex items-center gap-1.5"><i data-lucide="pin" class="w-4 h-4 text-indigo-500"></i> 고정지출 원본 관리</span>
+            <span class="text-[11px] text-indigo-600 font-black mt-1 bg-indigo-50 px-2 py-0.5 rounded w-fit">
+              이번 달 고정비 총합: ${formatWon(totalFixedAmount)}
+            </span>
           </h3>
-          <button onclick="openFixedModal()" class="bg-indigo-50 hover:bg-indigo-100 text-indigo-600 px-2 py-1 rounded text-xs font-bold transition flex items-center gap-1">
+          <button onclick="openFixedModal()" class="bg-indigo-50 hover:bg-indigo-100 text-indigo-600 px-2 py-1 rounded text-xs font-bold transition flex items-center gap-1 shrink-0">
             <i data-lucide="plus" class="w-3.5 h-3.5"></i> 등록
           </button>
         </div>
@@ -509,7 +545,7 @@ async function renderExpenses() {
           여기에 등록해 두면, 설정된 유효 기간에 맞춰 매월 지출 내역에 자동으로 주입됩니다.
         </p>
 
-        <!-- 고정비 마스터 리스트 -->
+        <!-- 고정비 원본 목록 -->
         <div class="space-y-3 max-h-[450px] overflow-y-auto pr-1">
           ${currentMonthFixedTemplates.length === 0 ? `
             <div class="text-center py-10 text-slate-400 bg-slate-50/50 rounded-xl border border-dashed">
@@ -543,7 +579,7 @@ async function renderExpenses() {
         </div>
       </div>
 
-      <!-- [우측 단] 실제 지출 내역 목록 (2/3 너비) -->
+      <!-- [우측 단] 실제 지출 내역 목록 -->
       <div class="glass-card rounded-2xl p-6 lg:col-span-2 flex flex-col">
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4 border-b border-slate-100 pb-3">
           <div class="flex items-center space-x-3">
@@ -552,16 +588,17 @@ async function renderExpenses() {
           </div>
           
           <div class="flex flex-wrap gap-2">
-            <!-- 수동 기입 추가 버튼 신설 -->
             <button onclick="openExpenseCreateForm()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow transition">
               <i data-lucide="plus-circle" class="w-3.5 h-3.5"></i> 일반 지출 수동 등록
             </button>
             
-            <select id="expense-month-filter" class="bg-slate-100 border-none rounded-lg text-xs font-bold py-1.5 px-2 text-slate-600 focus:outline-none" onchange="changeExpenseFilterMonth(this.value)">
+            <div class="flex space-x-1 overflow-x-auto py-1 max-w-full scrollbar-hide">
               ${Array.from({length: 12}, (_, i) => i + 1).map(m => `
-                <option value="${m}" ${state.selectedMonth === m ? 'selected' : ''}>${m}월 지출</option>
+                <button onclick="changeExpenseFilterMonth(${m})" class="px-2.5 py-1.5 rounded-lg text-xs font-bold transition whitespace-nowrap ${state.selectedMonth === m ? 'bg-indigo-600 text-white shadow-md' : 'bg-slate-100 hover:bg-slate-200 text-slate-600'}">
+                  ${m}월
+                </button>
               `).join('')}
-            </select>
+            </div>
           </div>
         </div>
 
@@ -654,10 +691,8 @@ async function filterExpenses(key, val) {
   await renderExpenses();
 }
 
-// 신규: 지출 관리 탭 내 '일반 지출 수동 등록' 모달 제어
 async function openExpenseCreateForm() {
-  // 모달 재활용: 기존 지출 수정 모달을 신규 추가 폼으로 사용합니다.
-  document.getElementById('edit-expense-id').value = ''; // 추가 모드임을 표시
+  document.getElementById('edit-expense-id').value = '';
   document.getElementById('edit-expense-year').value = state.selectedYear;
   document.getElementById('edit-expense-month').value = state.selectedMonth;
   document.getElementById('edit-expense-name').value = '';
@@ -769,12 +804,10 @@ async function handleExpenseUpdate(event) {
   try {
     showLoading();
     if (id === '') {
-      // 신규 등록 로직 작동 (id가 비어있을 때)
       await window.StorageService.addExpense({
         year, month, category, itemName: name, amount, paymentDay: day, paymentMethod: method, isFixed, memo
       });
     } else {
-      // 기존 수정 로직 작동
       await window.StorageService.updateExpense(id, {
         year, month, category, itemName: name, amount, paymentDay: day, paymentMethod: method, isFixed, memo
       });
@@ -787,9 +820,6 @@ async function handleExpenseUpdate(event) {
   }
 }
 
-// ----------------------------------------------------
-// 신규: 고정지출 템플릿(마스터) 모달 제어 및 서브밋 로직
-// ----------------------------------------------------
 async function openFixedModal(id = null) {
   const categories = await window.StorageService.getCategories();
   const methods = await window.StorageService.getPaymentMethods();
@@ -801,7 +831,6 @@ async function openFixedModal(id = null) {
   pmSelect.innerHTML = methods.map(pm => `<option value="${pm}">${pm}</option>`).join('');
 
   if (id) {
-    // 수정 모드
     document.getElementById('fixed-modal-title').innerHTML = `<i data-lucide="edit-3" class="w-5 h-5 text-indigo-500"></i> 고정지출 템플릿 수정`;
     const list = await window.StorageService.getFixedExpenses();
     const fixed = list.find(f => f.id === id);
@@ -820,7 +849,6 @@ async function openFixedModal(id = null) {
     document.getElementById('edit-fixed-end-year').value = fixed.endYear || '';
     document.getElementById('edit-fixed-end-month').value = fixed.endMonth || '1';
   } else {
-    // 신규 추가 모드
     document.getElementById('fixed-modal-title').innerHTML = `<i data-lucide="plus-circle" class="w-5 h-5 text-indigo-500"></i> 고정지출 템플릿 등록`;
     document.getElementById('edit-fixed-id').value = '';
     document.getElementById('edit-fixed-name').value = '';
@@ -846,7 +874,7 @@ async function handleFixedExpenseSubmit(event) {
   const category = document.getElementById('edit-fixed-category').value;
   const method = document.getElementById('edit-fixed-method').value;
   const name = document.getElementById('edit-fixed-name').value;
-  const amount = document.getElementById('edit-fixed-amount').value;
+  const amount = parseFloat(document.getElementById('edit-fixed-amount').value);
   const day = document.getElementById('edit-fixed-day').value;
   const memo = document.getElementById('edit-fixed-memo').value;
 
@@ -860,17 +888,38 @@ async function handleFixedExpenseSubmit(event) {
 
   try {
     showLoading();
+    
+    let oldFixed = null;
     if (id) {
-      // 수정
+      const list = await window.StorageService.getFixedExpenses();
+      oldFixed = list.find(f => f.id === id);
+    }
+
+    if (id) {
       await window.StorageService.updateFixedExpense(id, {
         category, paymentMethod: method, itemName: name, amount, paymentDay: day, startYear, startMonth, endYear, endMonth, memo
       });
     } else {
-      // 추가
       await window.StorageService.addFixedExpense({
         category, paymentMethod: method, itemName: name, amount, paymentDay: day, startYear, startMonth, endYear, endMonth, memo
       });
     }
+
+    // 신규: 원본 템플릿 수정 시 주입되어 있던 실제 지출 내역도 함께 일괄 업데이트
+    if (id && oldFixed) {
+      const expenses = await window.StorageService.getExpenses();
+      const toUpdate = expenses.filter(e => e.isFixed && e.itemName === oldFixed.itemName && e.category === oldFixed.category);
+      await Promise.all(toUpdate.map(e => window.StorageService.updateExpense(e.id, {
+        ...e,
+        category: category,
+        itemName: name,
+        amount: amount,
+        paymentMethod: method,
+        paymentDay: day,
+        memo: memo ? `(자동주입) ${memo}` : '고정지출 자동반영'
+      })));
+    }
+
     closeFixedModal();
     await renderExpenses();
   } catch (err) {
@@ -880,10 +929,21 @@ async function handleFixedExpenseSubmit(event) {
 }
 
 async function deleteFixedExpenseItem(id) {
-  if (confirm('고정지출 템플릿 원본을 삭제하시겠습니까?\n(원본 삭제 시 앞으로의 달에는 자동 반영되지 않습니다.)')) {
+  if (confirm('고정지출 템플릿 원본을 삭제하시겠습니까?\n(원본 삭제 시 이미 생성된 이번 달의 지출 내역에서도 동반 삭제됩니다.)')) {
     try {
       showLoading();
+      const list = await window.StorageService.getFixedExpenses();
+      const fixedTemp = list.find(f => f.id === id);
+
       await window.StorageService.deleteFixedExpense(id);
+
+      // 신규: 고정지출 템플릿 원본 삭제 시, 실제 지출 목록에 자동 주입되어 있던 내역도 함께 자동 일괄 제거
+      if (fixedTemp) {
+        const expenses = await window.StorageService.getExpenses();
+        const toDelete = expenses.filter(e => e.isFixed && e.itemName === fixedTemp.itemName && e.category === fixedTemp.category);
+        await Promise.all(toDelete.map(e => window.StorageService.deleteExpense(e.id)));
+      }
+
       await renderExpenses();
     } catch (err) {
       alert(err.message);
@@ -900,11 +960,24 @@ async function renderIncome() {
   const container = document.getElementById('tab-content');
   
   const incomes = await window.StorageService.getIncomes();
+  
+  const yearIncomes = incomes.filter(i => i.year === state.selectedYear);
+  const totalYearIncome = yearIncomes.reduce((sum, i) => sum + i.amount, 0);
+
   const filtered = incomes
     .filter(i => i.year === state.selectedYear && i.month === state.selectedMonth)
     .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
   container.innerHTML = `
+    <!-- 연간 누적 총 수입 요약 대시보드 카드 -->
+    <div class="glass-card rounded-2xl p-5 bg-gradient-to-r from-emerald-500 to-teal-500 text-white mb-6 flex justify-between items-center shadow-lg hover-lift">
+      <div>
+        <span class="text-xs font-bold text-emerald-100 block uppercase tracking-wider">${state.selectedYear}년 연간 총 수입</span>
+        <span class="text-2xl font-black mt-1 block">${formatWon(totalYearIncome)}</span>
+      </div>
+      <div class="p-3 bg-white/10 rounded-xl"><i data-lucide="award" class="w-7 h-7 text-emerald-100"></i></div>
+    </div>
+
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
       
       <!-- 수입 입력 폼 -->
@@ -942,11 +1015,13 @@ async function renderIncome() {
             <span class="bg-emerald-50 text-emerald-600 text-xs px-2.5 py-1 rounded-full font-bold">총 ${filtered.length}건</span>
           </div>
           
-          <select class="bg-slate-100 border-none rounded-lg text-xs font-bold py-1.5 px-2 text-slate-600 focus:outline-none" onchange="changeIncomeMonth(this.value)">
+          <div class="flex space-x-1 overflow-x-auto py-1 max-w-full scrollbar-hide">
             ${Array.from({length: 12}, (_, i) => i + 1).map(m => `
-              <option value="${m}" ${state.selectedMonth === m ? 'selected' : ''}>${m}월 수입</option>
+              <button onclick="changeIncomeMonth(${m})" class="px-2.5 py-1.5 rounded-lg text-xs font-bold transition whitespace-nowrap ${state.selectedMonth === m ? 'bg-emerald-600 text-white shadow-md' : 'bg-slate-100 hover:bg-slate-200 text-slate-600'}">
+                ${m}월
+              </button>
             `).join('')}
-          </select>
+          </div>
         </div>
 
         <div class="overflow-y-auto max-h-[500px] flex-grow pr-1 space-y-3">
@@ -1067,11 +1142,12 @@ async function handleIncomeUpdate(event) {
 
 
 // ----------------------------------------------------
-// 4. 연간 표 (Yearly Table)
+// 4. 연간 표 (Yearly Table) - rowspan 셀 병합 & 합계 수평 정렬 완벽 복구
 // ----------------------------------------------------
 async function renderYearlyTable() {
   const container = document.getElementById('tab-content');
   
+  // 신규: 데이터 로딩 버그 긴급 수정 ( getPaymentMethods 체이닝 제거 및 3대 데이터 정확히 로드 )
   const [categories, allExpenses, allIncomes] = await Promise.all([
     window.StorageService.getCategories(),
     window.StorageService.getExpenses(),
@@ -1103,6 +1179,12 @@ async function renderYearlyTable() {
     return a.itemName.localeCompare(b.itemName);
   });
 
+  // 셀 병합(rowspan)을 위한 빈도수 계산
+  const categoryCounts = {};
+  rowList.forEach(row => {
+    categoryCounts[row.category] = (categoryCounts[row.category] || 0) + 1;
+  });
+
   const monthlyTotalExpense = Array(12).fill(0);
   const monthlyTotalIncome = Array(12).fill(0);
 
@@ -1127,6 +1209,8 @@ async function renderYearlyTable() {
   const grandTotalIncome = monthlyTotalIncome.reduce((sum, val) => sum + val, 0);
   const grandTotalBalance = grandTotalIncome - grandTotalExpense;
 
+  let prevCategory = null;
+
   container.innerHTML = `
     <div class="glass-card rounded-2xl p-6">
       <div class="flex flex-col sm:flex-row justify-between sm:items-center gap-4 mb-6 border-b border-slate-100 pb-4">
@@ -1135,7 +1219,7 @@ async function renderYearlyTable() {
             <i data-lucide="table" class="w-5 h-5 text-indigo-500"></i>
             ${state.selectedYear}년 연간 가계부 그리드 뷰
           </h3>
-          <p class="text-xs text-slate-400 mt-1">1~12월 지출 추이와 누적 요약을 한눈에 봅니다.</p>
+          <p class="text-xs text-slate-400 mt-1">상하좌우 자동 스크롤 고정 및 실시간 연간 합계를 최상단에 제공합니다.</p>
         </div>
         <div class="flex items-center space-x-2 text-xs font-bold text-slate-500">
           <span class="inline-block w-3 h-3 rounded-full bg-slate-100 border border-slate-300"></span> <span>0원/미지출</span>
@@ -1147,25 +1231,73 @@ async function renderYearlyTable() {
         <table class="yearly-table">
           <thead>
             <tr class="bg-slate-50 font-bold text-slate-600 text-xs">
-              <th class="sticky-col text-left">분류</th>
-              <th class="sticky-col text-left">지출 항목명</th>
-              <th class="text-center">지출일</th>
+              <th class="sticky-col-1 text-left">분류</th>
+              <th class="sticky-col-2 text-left">지출 항목명</th>
+              <th class="sticky-col-3 text-center">지출일</th>
               ${Array.from({length: 12}, (_, i) => `<th class="text-center">${i + 1}월</th>`).join('')}
               <th class="text-right">연간 합계</th>
             </tr>
           </thead>
           <tbody class="text-xs text-slate-700">
+            
+            <!-- 신규: 합계 행의 3단 개별 셀 분리 정렬 매핑 수리 (colspan을 제거하여 스크롤 시 정렬이 완벽하게 맞물림) -->
+            <tr class="summary-row text-slate-700 font-bold border-b-2 border-slate-300">
+              <td class="sticky-col-1 bg-slate-100 font-bold text-emerald-700">수입 누계</td>
+              <td class="sticky-col-2 bg-slate-100 font-bold text-emerald-700">총 수입 (B)</td>
+              <td class="sticky-col-3 bg-slate-100 text-center font-bold text-emerald-700">-</td>
+              ${monthlyTotalIncome.map(sum => `
+                <td class="amount-cell font-bold bg-slate-100/50 text-emerald-600" style="text-align: right;">${sum > 0 ? sum.toLocaleString() : '-'}</td>
+              `).join('')}
+              <td class="amount-cell font-bold bg-slate-100 text-emerald-600" style="text-align: right;">${grandTotalIncome.toLocaleString()}</td>
+            </tr>
+
+            <tr class="summary-row text-slate-700 font-bold border-b-2 border-slate-300">
+              <td class="sticky-col-1 bg-slate-100 font-bold text-indigo-700">지출 누계</td>
+              <td class="sticky-col-2 bg-slate-100 font-bold text-indigo-700">총 지출 (A)</td>
+              <td class="sticky-col-3 bg-slate-100 text-center font-bold text-indigo-700">-</td>
+              ${monthlyTotalExpense.map(sum => `
+                <td class="amount-cell font-bold bg-slate-100/50 text-slate-800" style="text-align: right;">${sum > 0 ? sum.toLocaleString() : '-'}</td>
+              `).join('')}
+              <td class="amount-cell font-bold bg-slate-100 text-indigo-600" style="text-align: right;">${grandTotalExpense.toLocaleString()}</td>
+            </tr>
+
+            <tr class="summary-row text-slate-800 font-bold border-b-4 border-double border-slate-400">
+              <td class="sticky-col-1 bg-slate-100 font-bold text-slate-800">최종 정산</td>
+              <td class="sticky-col-2 bg-slate-100 font-bold text-slate-800">순 잔액 (B - A)</td>
+              <td class="sticky-col-3 bg-slate-100 text-center font-bold text-slate-800">-</td>
+              ${monthlyBalance.map(bal => {
+                const isNeg = bal < 0;
+                return `
+                  <td class="amount-cell font-bold bg-slate-100/50 ${isNeg ? 'negative-amount' : 'positive-amount'}" style="text-align: right;">
+                    ${bal !== 0 ? (isNeg ? '-' : '') + Math.abs(bal).toLocaleString() : '-'}
+                  </td>
+                `;
+              }).join('')}
+              <td class="amount-cell font-bold bg-slate-100 ${grandTotalBalance < 0 ? 'negative-amount' : 'positive-amount'}" style="text-align: right;">
+                ${grandTotalBalance < 0 ? '-' : ''}${Math.abs(grandTotalBalance).toLocaleString()}
+              </td>
+            </tr>
+
+            <!-- 데이터 행 목록 (셀 병합 & 3단 고정 클래스 추가) -->
             ${rowList.length === 0 ? `
               <tr>
                 <td colspan="16" class="text-center py-20 text-slate-400">등록된 지출 내역이 없습니다.</td>
               </tr>
             ` : rowList.map(row => {
               const rowSum = row.months.reduce((sum, val) => sum + val, 0);
+              
+              const isFirstRowOfCat = (row.category !== prevCategory);
+              prevCategory = row.category;
+
               return `
                 <tr class="hover:bg-slate-50/50 transition">
-                  <td class="sticky-col font-bold text-indigo-600 bg-slate-50/30">${row.category}</td>
-                  <td class="sticky-col font-semibold text-slate-700 bg-slate-50/30">${row.itemName}</td>
-                  <td class="text-center text-slate-400 font-medium">${row.paymentDay || '-'}</td>
+                  ${isFirstRowOfCat ? `
+                    <td rowspan="${categoryCounts[row.category]}" class="sticky-col-1 font-bold text-indigo-600 bg-slate-50/40 text-center align-middle border-b border-slate-200">
+                      ${row.category}
+                    </td>
+                  ` : ''}
+                  <td class="sticky-col-2 font-semibold text-slate-700">${row.itemName}</td>
+                  <td class="sticky-col-3 text-center text-slate-400 font-medium">${row.paymentDay || '-'}</td>
                   ${row.months.map(amount => `
                     <td class="amount-cell ${amount > 0 ? 'bg-indigo-50/10 text-slate-800 font-semibold' : 'text-slate-300'}" style="text-align: right;">
                       ${amount > 0 ? amount.toLocaleString() : '-'}
@@ -1177,40 +1309,7 @@ async function renderYearlyTable() {
                 </tr>
               `;
             }).join('')}
-            
-            <tr class="summary-row text-slate-700">
-              <td class="sticky-col font-bold" colspan="2">총 지출 (A)</td>
-              <td class="text-center">-</td>
-              ${monthlyTotalExpense.map(sum => `
-                <td class="amount-cell font-bold" style="text-align: right;">${sum > 0 ? sum.toLocaleString() : '-'}</td>
-              `).join('')}
-              <td class="amount-cell font-bold text-indigo-600" style="text-align: right;">${grandTotalExpense.toLocaleString()}</td>
-            </tr>
 
-            <tr class="summary-row text-slate-700">
-              <td class="sticky-col font-bold" colspan="2">총 수입 (B)</td>
-              <td class="text-center">-</td>
-              ${monthlyTotalIncome.map(sum => `
-                <td class="amount-cell font-bold text-emerald-600" style="text-align: right;">${sum > 0 ? sum.toLocaleString() : '-'}</td>
-              `).join('')}
-              <td class="amount-cell font-bold text-emerald-600" style="text-align: right;">${grandTotalIncome.toLocaleString()}</td>
-            </tr>
-
-            <tr class="summary-row text-slate-800">
-              <td class="sticky-col font-bold" colspan="2">순 잔액 (B - A)</td>
-              <td class="text-center">-</td>
-              ${monthlyBalance.map(bal => {
-                const isNeg = bal < 0;
-                return `
-                  <td class="amount-cell font-bold ${isNeg ? 'negative-amount' : 'positive-amount'}" style="text-align: right;">
-                    ${bal !== 0 ? (isNeg ? '-' : '') + Math.abs(bal).toLocaleString() : '-'}
-                  </td>
-                `;
-              }).join('')}
-              <td class="amount-cell font-bold ${grandTotalBalance < 0 ? 'negative-amount' : 'positive-amount'}" style="text-align: right;">
-                ${grandTotalBalance < 0 ? '-' : ''}${Math.abs(grandTotalBalance).toLocaleString()}
-              </td>
-            </tr>
           </tbody>
         </table>
       </div>
@@ -1349,7 +1448,6 @@ async function saveSupabaseSettings(event) {
   let url = document.getElementById('sb-url').value.trim();
   const key = document.getElementById('sb-key').value.trim();
 
-  // 사용자가 복사 시 뒤에 경로(/rest/v1/)를 붙여서 넣은 경우 자동 정제합니다.
   if (url.endsWith('/')) {
     url = url.slice(0, -1);
   }
@@ -1391,7 +1489,7 @@ async function migrateLocalData() {
     try {
       showLoading();
       const res = await window.StorageService.migrateLocalToSupabase();
-      alert(`데이터 이전 성공!\n- 결제수단: ${res.paymentMethods}건\n- 카테고리: ${res.categories}건\n- 고정지출 원본: ${res.fixedExpenses}건\n- 지출: ${res.expenses}건\n- 수입: ${res.incomes}건이 Supabase DB로 업로드되었습니다.`);
+      alert(`데이터 이전 성공!\n- 결제수단: ${res.paymentMethods}건\n- 카테고리: ${res.categories}건\n- 고정지출 원본: ${res.fixedExpenses}건\n- 지출: ${res.expenses.toLocaleString()}원 상당\n- 수입: ${res.incomes.toLocaleString()}원 상당이 Supabase DB로 업로드되었습니다.`);
       await renderSettings();
     } catch (err) {
       alert(err.message);
